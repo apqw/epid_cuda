@@ -1,0 +1,57 @@
+
+            //wfile<<c->index<<" "
+            //    <<c->state<<" "
+           //    <<fixed<<setprecision(15)<<c->radius<<" "
+           //   <<fixed<<setprecision(15)<<c->ageb<<" "
+           //  <<fixed<<setprecision(15)<<c->agek<<" "
+           //     <<fixed<<setprecision(15)<<c->ca2p()<<" "
+           //    <<fixed<<setprecision(15)<<c->x()<<" "
+           //   <<fixed<<setprecision(15)<<c->y()<<" "
+           //  <<fixed<<setprecision(15)<<c->z()<<" "
+           // <<fixed<<setprecision(15)<<c->ca2p_avg<<" "
+           //    <<c->rest_div_times<<" "
+           //   <<fixed<<setprecision(15)<<c->ex_fat<<" "
+           //  <<fixed<<setprecision(15)<<c->in_fat<<" "
+           // <<(c->is_touch?1:0)<<" "
+           //    <<fixed<<setprecision(15)<<c->spr_nat_len<<" "
+           //   <<(int)(c->pair==nullptr?(int)-1:(int)(c->pair->index))<<" "
+		// <<c->fix_origin<<" "<<(int)(c->md.nullified?(int)1:(int)0)<<" "
+		// <<(int)(c->is_malignant?1:0)
+
+syntax = "proto3";
+message Cell{
+	int32 index=1;
+	enum CellState {
+		ALIVE = 0;
+		DEAD = 1;
+		DISA = 2;
+		UNUSED = 3;
+		FIX = 4;
+		BLANK = 5;
+		DER = 6;
+		MUSUME = 7;
+		AIR = 8;
+		MEMB = 9;
+		DUMMY_FIX=10;
+	};
+	CellState state = 2;
+	double radius = 3;
+	double ageb = 4;
+	double agek = 5;
+	double ca2p = 6;
+	double ca2p_avg = 7;
+	repeated double pos = 8 [packed=true];
+	int32 rest_div_times = 9;
+	double ex_fat = 10;
+	double in_fat = 11;
+	bool is_touch = 12;
+	double spr_nat_len=13;
+	int32 pair_index = 14;
+	int32 fix_origin = 15;
+	bool nullified = 16;
+	bool malignant = 17;
+}
+
+message CellSet{
+	repeated Cell cell = 1;
+}
