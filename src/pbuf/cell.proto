@@ -19,6 +19,7 @@
 		// <<(int)(c->is_malignant?1:0)
 
 syntax = "proto3";
+package CellDataPB;
 message Cell{
 	int32 index=1;
 	enum CellState {
@@ -40,7 +41,7 @@ message Cell{
 	double agek = 5;
 	double ca2p = 6;
 	double ca2p_avg = 7;
-	repeated double pos = 8 [packed=true];
+	//8
 	int32 rest_div_times = 9;
 	double ex_fat = 10;
 	double in_fat = 11;
@@ -50,6 +51,7 @@ message Cell{
 	int32 fix_origin = 15;
 	bool nullified = 16;
 	bool malignant = 17;
+	double x = 18;double y=19;double z=20;
 }
 
 message CellSet{

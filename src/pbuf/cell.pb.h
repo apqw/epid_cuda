@@ -30,12 +30,16 @@
 #include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
 // @@protoc_insertion_point(includes)
+namespace CellDataPB {
 class Cell;
 class CellDefaultTypeInternal;
 extern CellDefaultTypeInternal _Cell_default_instance_;
 class CellSet;
 class CellSetDefaultTypeInternal;
 extern CellSetDefaultTypeInternal _CellSet_default_instance_;
+}  // namespace CellDataPB
+
+namespace CellDataPB {
 
 namespace protobuf_cell_2eproto {
 // Internal implementation detail -- do not call these.
@@ -80,7 +84,7 @@ inline bool Cell_CellState_Parse(
 }
 // ===================================================================
 
-class Cell : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:Cell) */ {
+class Cell : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:CellDataPB.Cell) */ {
  public:
   Cell();
   virtual ~Cell();
@@ -191,29 +195,17 @@ class Cell : public ::google::protobuf::Message /* @@protoc_insertion_point(clas
 
   // accessors -------------------------------------------------------
 
-  // repeated double pos = 8 [packed = true];
-  int pos_size() const;
-  void clear_pos();
-  static const int kPosFieldNumber = 8;
-  double pos(int index) const;
-  void set_pos(int index, double value);
-  void add_pos(double value);
-  const ::google::protobuf::RepeatedField< double >&
-      pos() const;
-  ::google::protobuf::RepeatedField< double >*
-      mutable_pos();
-
   // int32 index = 1;
   void clear_index();
   static const int kIndexFieldNumber = 1;
   ::google::protobuf::int32 index() const;
   void set_index(::google::protobuf::int32 value);
 
-  // .Cell.CellState state = 2;
+  // .CellDataPB.Cell.CellState state = 2;
   void clear_state();
   static const int kStateFieldNumber = 2;
-  ::Cell_CellState state() const;
-  void set_state(::Cell_CellState value);
+  ::CellDataPB::Cell_CellState state() const;
+  void set_state(::CellDataPB::Cell_CellState value);
 
   // double radius = 3;
   void clear_radius();
@@ -299,12 +291,28 @@ class Cell : public ::google::protobuf::Message /* @@protoc_insertion_point(clas
   bool malignant() const;
   void set_malignant(bool value);
 
-  // @@protoc_insertion_point(class_scope:Cell)
+  // double x = 18;
+  void clear_x();
+  static const int kXFieldNumber = 18;
+  double x() const;
+  void set_x(double value);
+
+  // double y = 19;
+  void clear_y();
+  static const int kYFieldNumber = 19;
+  double y() const;
+  void set_y(double value);
+
+  // double z = 20;
+  void clear_z();
+  static const int kZFieldNumber = 20;
+  double z() const;
+  void set_z(double value);
+
+  // @@protoc_insertion_point(class_scope:CellDataPB.Cell)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::RepeatedField< double > pos_;
-  mutable int _pos_cached_byte_size_;
   ::google::protobuf::int32 index_;
   int state_;
   double radius_;
@@ -321,12 +329,15 @@ class Cell : public ::google::protobuf::Message /* @@protoc_insertion_point(clas
   bool is_touch_;
   bool nullified_;
   bool malignant_;
+  double x_;
+  double y_;
+  double z_;
   mutable int _cached_size_;
   friend struct  protobuf_cell_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
 
-class CellSet : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:CellSet) */ {
+class CellSet : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:CellDataPB.CellSet) */ {
  public:
   CellSet();
   virtual ~CellSet();
@@ -393,23 +404,23 @@ class CellSet : public ::google::protobuf::Message /* @@protoc_insertion_point(c
 
   // accessors -------------------------------------------------------
 
-  // repeated .Cell cell = 1;
+  // repeated .CellDataPB.Cell cell = 1;
   int cell_size() const;
   void clear_cell();
   static const int kCellFieldNumber = 1;
-  const ::Cell& cell(int index) const;
-  ::Cell* mutable_cell(int index);
-  ::Cell* add_cell();
-  ::google::protobuf::RepeatedPtrField< ::Cell >*
+  const ::CellDataPB::Cell& cell(int index) const;
+  ::CellDataPB::Cell* mutable_cell(int index);
+  ::CellDataPB::Cell* add_cell();
+  ::google::protobuf::RepeatedPtrField< ::CellDataPB::Cell >*
       mutable_cell();
-  const ::google::protobuf::RepeatedPtrField< ::Cell >&
+  const ::google::protobuf::RepeatedPtrField< ::CellDataPB::Cell >&
       cell() const;
 
-  // @@protoc_insertion_point(class_scope:CellSet)
+  // @@protoc_insertion_point(class_scope:CellDataPB.CellSet)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::Cell > cell_;
+  ::google::protobuf::RepeatedPtrField< ::CellDataPB::Cell > cell_;
   mutable int _cached_size_;
   friend struct  protobuf_cell_2eproto::TableStruct;
 };
@@ -426,27 +437,27 @@ inline void Cell::clear_index() {
   index_ = 0;
 }
 inline ::google::protobuf::int32 Cell::index() const {
-  // @@protoc_insertion_point(field_get:Cell.index)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.index)
   return index_;
 }
 inline void Cell::set_index(::google::protobuf::int32 value) {
   
   index_ = value;
-  // @@protoc_insertion_point(field_set:Cell.index)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.index)
 }
 
-// .Cell.CellState state = 2;
+// .CellDataPB.Cell.CellState state = 2;
 inline void Cell::clear_state() {
   state_ = 0;
 }
-inline ::Cell_CellState Cell::state() const {
-  // @@protoc_insertion_point(field_get:Cell.state)
-  return static_cast< ::Cell_CellState >(state_);
+inline ::CellDataPB::Cell_CellState Cell::state() const {
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.state)
+  return static_cast< ::CellDataPB::Cell_CellState >(state_);
 }
-inline void Cell::set_state(::Cell_CellState value) {
+inline void Cell::set_state(::CellDataPB::Cell_CellState value) {
   
   state_ = value;
-  // @@protoc_insertion_point(field_set:Cell.state)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.state)
 }
 
 // double radius = 3;
@@ -454,13 +465,13 @@ inline void Cell::clear_radius() {
   radius_ = 0;
 }
 inline double Cell::radius() const {
-  // @@protoc_insertion_point(field_get:Cell.radius)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.radius)
   return radius_;
 }
 inline void Cell::set_radius(double value) {
   
   radius_ = value;
-  // @@protoc_insertion_point(field_set:Cell.radius)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.radius)
 }
 
 // double ageb = 4;
@@ -468,13 +479,13 @@ inline void Cell::clear_ageb() {
   ageb_ = 0;
 }
 inline double Cell::ageb() const {
-  // @@protoc_insertion_point(field_get:Cell.ageb)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.ageb)
   return ageb_;
 }
 inline void Cell::set_ageb(double value) {
   
   ageb_ = value;
-  // @@protoc_insertion_point(field_set:Cell.ageb)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.ageb)
 }
 
 // double agek = 5;
@@ -482,13 +493,13 @@ inline void Cell::clear_agek() {
   agek_ = 0;
 }
 inline double Cell::agek() const {
-  // @@protoc_insertion_point(field_get:Cell.agek)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.agek)
   return agek_;
 }
 inline void Cell::set_agek(double value) {
   
   agek_ = value;
-  // @@protoc_insertion_point(field_set:Cell.agek)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.agek)
 }
 
 // double ca2p = 6;
@@ -496,13 +507,13 @@ inline void Cell::clear_ca2p() {
   ca2p_ = 0;
 }
 inline double Cell::ca2p() const {
-  // @@protoc_insertion_point(field_get:Cell.ca2p)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.ca2p)
   return ca2p_;
 }
 inline void Cell::set_ca2p(double value) {
   
   ca2p_ = value;
-  // @@protoc_insertion_point(field_set:Cell.ca2p)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.ca2p)
 }
 
 // double ca2p_avg = 7;
@@ -510,43 +521,13 @@ inline void Cell::clear_ca2p_avg() {
   ca2p_avg_ = 0;
 }
 inline double Cell::ca2p_avg() const {
-  // @@protoc_insertion_point(field_get:Cell.ca2p_avg)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.ca2p_avg)
   return ca2p_avg_;
 }
 inline void Cell::set_ca2p_avg(double value) {
   
   ca2p_avg_ = value;
-  // @@protoc_insertion_point(field_set:Cell.ca2p_avg)
-}
-
-// repeated double pos = 8 [packed = true];
-inline int Cell::pos_size() const {
-  return pos_.size();
-}
-inline void Cell::clear_pos() {
-  pos_.Clear();
-}
-inline double Cell::pos(int index) const {
-  // @@protoc_insertion_point(field_get:Cell.pos)
-  return pos_.Get(index);
-}
-inline void Cell::set_pos(int index, double value) {
-  pos_.Set(index, value);
-  // @@protoc_insertion_point(field_set:Cell.pos)
-}
-inline void Cell::add_pos(double value) {
-  pos_.Add(value);
-  // @@protoc_insertion_point(field_add:Cell.pos)
-}
-inline const ::google::protobuf::RepeatedField< double >&
-Cell::pos() const {
-  // @@protoc_insertion_point(field_list:Cell.pos)
-  return pos_;
-}
-inline ::google::protobuf::RepeatedField< double >*
-Cell::mutable_pos() {
-  // @@protoc_insertion_point(field_mutable_list:Cell.pos)
-  return &pos_;
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.ca2p_avg)
 }
 
 // int32 rest_div_times = 9;
@@ -554,13 +535,13 @@ inline void Cell::clear_rest_div_times() {
   rest_div_times_ = 0;
 }
 inline ::google::protobuf::int32 Cell::rest_div_times() const {
-  // @@protoc_insertion_point(field_get:Cell.rest_div_times)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.rest_div_times)
   return rest_div_times_;
 }
 inline void Cell::set_rest_div_times(::google::protobuf::int32 value) {
   
   rest_div_times_ = value;
-  // @@protoc_insertion_point(field_set:Cell.rest_div_times)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.rest_div_times)
 }
 
 // double ex_fat = 10;
@@ -568,13 +549,13 @@ inline void Cell::clear_ex_fat() {
   ex_fat_ = 0;
 }
 inline double Cell::ex_fat() const {
-  // @@protoc_insertion_point(field_get:Cell.ex_fat)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.ex_fat)
   return ex_fat_;
 }
 inline void Cell::set_ex_fat(double value) {
   
   ex_fat_ = value;
-  // @@protoc_insertion_point(field_set:Cell.ex_fat)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.ex_fat)
 }
 
 // double in_fat = 11;
@@ -582,13 +563,13 @@ inline void Cell::clear_in_fat() {
   in_fat_ = 0;
 }
 inline double Cell::in_fat() const {
-  // @@protoc_insertion_point(field_get:Cell.in_fat)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.in_fat)
   return in_fat_;
 }
 inline void Cell::set_in_fat(double value) {
   
   in_fat_ = value;
-  // @@protoc_insertion_point(field_set:Cell.in_fat)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.in_fat)
 }
 
 // bool is_touch = 12;
@@ -596,13 +577,13 @@ inline void Cell::clear_is_touch() {
   is_touch_ = false;
 }
 inline bool Cell::is_touch() const {
-  // @@protoc_insertion_point(field_get:Cell.is_touch)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.is_touch)
   return is_touch_;
 }
 inline void Cell::set_is_touch(bool value) {
   
   is_touch_ = value;
-  // @@protoc_insertion_point(field_set:Cell.is_touch)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.is_touch)
 }
 
 // double spr_nat_len = 13;
@@ -610,13 +591,13 @@ inline void Cell::clear_spr_nat_len() {
   spr_nat_len_ = 0;
 }
 inline double Cell::spr_nat_len() const {
-  // @@protoc_insertion_point(field_get:Cell.spr_nat_len)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.spr_nat_len)
   return spr_nat_len_;
 }
 inline void Cell::set_spr_nat_len(double value) {
   
   spr_nat_len_ = value;
-  // @@protoc_insertion_point(field_set:Cell.spr_nat_len)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.spr_nat_len)
 }
 
 // int32 pair_index = 14;
@@ -624,13 +605,13 @@ inline void Cell::clear_pair_index() {
   pair_index_ = 0;
 }
 inline ::google::protobuf::int32 Cell::pair_index() const {
-  // @@protoc_insertion_point(field_get:Cell.pair_index)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.pair_index)
   return pair_index_;
 }
 inline void Cell::set_pair_index(::google::protobuf::int32 value) {
   
   pair_index_ = value;
-  // @@protoc_insertion_point(field_set:Cell.pair_index)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.pair_index)
 }
 
 // int32 fix_origin = 15;
@@ -638,13 +619,13 @@ inline void Cell::clear_fix_origin() {
   fix_origin_ = 0;
 }
 inline ::google::protobuf::int32 Cell::fix_origin() const {
-  // @@protoc_insertion_point(field_get:Cell.fix_origin)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.fix_origin)
   return fix_origin_;
 }
 inline void Cell::set_fix_origin(::google::protobuf::int32 value) {
   
   fix_origin_ = value;
-  // @@protoc_insertion_point(field_set:Cell.fix_origin)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.fix_origin)
 }
 
 // bool nullified = 16;
@@ -652,13 +633,13 @@ inline void Cell::clear_nullified() {
   nullified_ = false;
 }
 inline bool Cell::nullified() const {
-  // @@protoc_insertion_point(field_get:Cell.nullified)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.nullified)
   return nullified_;
 }
 inline void Cell::set_nullified(bool value) {
   
   nullified_ = value;
-  // @@protoc_insertion_point(field_set:Cell.nullified)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.nullified)
 }
 
 // bool malignant = 17;
@@ -666,46 +647,88 @@ inline void Cell::clear_malignant() {
   malignant_ = false;
 }
 inline bool Cell::malignant() const {
-  // @@protoc_insertion_point(field_get:Cell.malignant)
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.malignant)
   return malignant_;
 }
 inline void Cell::set_malignant(bool value) {
   
   malignant_ = value;
-  // @@protoc_insertion_point(field_set:Cell.malignant)
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.malignant)
+}
+
+// double x = 18;
+inline void Cell::clear_x() {
+  x_ = 0;
+}
+inline double Cell::x() const {
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.x)
+  return x_;
+}
+inline void Cell::set_x(double value) {
+  
+  x_ = value;
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.x)
+}
+
+// double y = 19;
+inline void Cell::clear_y() {
+  y_ = 0;
+}
+inline double Cell::y() const {
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.y)
+  return y_;
+}
+inline void Cell::set_y(double value) {
+  
+  y_ = value;
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.y)
+}
+
+// double z = 20;
+inline void Cell::clear_z() {
+  z_ = 0;
+}
+inline double Cell::z() const {
+  // @@protoc_insertion_point(field_get:CellDataPB.Cell.z)
+  return z_;
+}
+inline void Cell::set_z(double value) {
+  
+  z_ = value;
+  // @@protoc_insertion_point(field_set:CellDataPB.Cell.z)
 }
 
 // -------------------------------------------------------------------
 
 // CellSet
 
-// repeated .Cell cell = 1;
+// repeated .CellDataPB.Cell cell = 1;
 inline int CellSet::cell_size() const {
   return cell_.size();
 }
 inline void CellSet::clear_cell() {
   cell_.Clear();
 }
-inline const ::Cell& CellSet::cell(int index) const {
-  // @@protoc_insertion_point(field_get:CellSet.cell)
+inline const ::CellDataPB::Cell& CellSet::cell(int index) const {
+  // @@protoc_insertion_point(field_get:CellDataPB.CellSet.cell)
   return cell_.Get(index);
 }
-inline ::Cell* CellSet::mutable_cell(int index) {
-  // @@protoc_insertion_point(field_mutable:CellSet.cell)
+inline ::CellDataPB::Cell* CellSet::mutable_cell(int index) {
+  // @@protoc_insertion_point(field_mutable:CellDataPB.CellSet.cell)
   return cell_.Mutable(index);
 }
-inline ::Cell* CellSet::add_cell() {
-  // @@protoc_insertion_point(field_add:CellSet.cell)
+inline ::CellDataPB::Cell* CellSet::add_cell() {
+  // @@protoc_insertion_point(field_add:CellDataPB.CellSet.cell)
   return cell_.Add();
 }
-inline ::google::protobuf::RepeatedPtrField< ::Cell >*
+inline ::google::protobuf::RepeatedPtrField< ::CellDataPB::Cell >*
 CellSet::mutable_cell() {
-  // @@protoc_insertion_point(field_mutable_list:CellSet.cell)
+  // @@protoc_insertion_point(field_mutable_list:CellDataPB.CellSet.cell)
   return &cell_;
 }
-inline const ::google::protobuf::RepeatedPtrField< ::Cell >&
+inline const ::google::protobuf::RepeatedPtrField< ::CellDataPB::Cell >&
 CellSet::cell() const {
-  // @@protoc_insertion_point(field_list:CellSet.cell)
+  // @@protoc_insertion_point(field_list:CellDataPB.CellSet.cell)
   return cell_;
 }
 
@@ -716,14 +739,16 @@ CellSet::cell() const {
 // @@protoc_insertion_point(namespace_scope)
 
 
+}  // namespace CellDataPB
+
 #ifndef SWIG
 namespace google {
 namespace protobuf {
 
-template <> struct is_proto_enum< ::Cell_CellState> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::CellDataPB::Cell_CellState> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::Cell_CellState>() {
-  return ::Cell_CellState_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::CellDataPB::Cell_CellState>() {
+  return ::CellDataPB::Cell_CellState_descriptor();
 }
 
 }  // namespace protobuf
