@@ -8,7 +8,7 @@
 #include <exception>
 #include <string>
 #include <algorithm>
-
+#include <iomanip>
 CellAttr::CellAttr()
     :fix_origin(-1),
     pair(-1),
@@ -106,6 +106,8 @@ void CellDataSet::push_to_device()
     cstate.push_to_device();
     cattr.push_to_device();
 }
+
+
 
 static bool verify_pb_data(const CellDataPB::CellSet* cs) {
     CELL_STATE last_state = MEMB;
@@ -274,7 +276,19 @@ CellPos * CellManager::get_device_pos_all()
 {
     return thrust::raw_pointer_cast(&cpos_all[0]);
 }
-
+CellPos * CellManager::get_device_pos_all_out()
+{
+    return thrust::raw_pointer_cast(&cpos_all_out[0]);
+}
+void CellManager::pos_swap_device()
+{
+    cpos_all.swap(cpos_all_out);
+}
+CELL_STATE * CellManager::get_device_non_memb_state()
+{
+    return non_memb_data.cstate.get_raw_device_ptr();
+}
+/*
 CELL_STATE * CellManager::get_device_state_all()
 {
     return thrust::raw_pointer_cast(&cstate_all[0]);
@@ -284,15 +298,38 @@ CellAttr * CellManager::get_device_attr_all()
 {
     return thrust::raw_pointer_cast(&cattr_all[0]);
 }
-
+*/
 NonMembConn * CellManager::get_device_nmconn()
 {
     return nmconn.get_raw_device_ptr();
 }
 
+MembConn * CellManager::get_device_mconn()
+{
+    return mconn.get_raw_device_ptr();
+}
+
+CellAttr * CellManager::get_device_nmattr()
+{
+    return non_memb_data.cattr.get_raw_device_ptr();
+}
+
 cudaTextureObject_t CellManager::get_pos_tex()
 {
     return pos_tex;
+}
+
+void CellManager::refresh_pos_tex()
+{
+    size_t asz = all_size();
+    cudaTextureObject_t ct;
+    cudaResourceDesc resDesc = make_real4_resource_desc(get_device_pos_all(), asz);
+    cudaTextureDesc texDesc;
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.readMode = cudaReadModeElementType;
+
+    cudaCreateTextureObject(&ct, &resDesc, &texDesc, NULL);
+    pos_tex = ct;
 }
 
 template<typename T>
@@ -314,17 +351,27 @@ void CellManager::push_to_device()
     non_memb_data.push_to_device();
     mconn.push_to_device(); nmconn.push_to_device();
     concat_dev_vec(memb_data.cpos.dv, non_memb_data.cpos.dv, cpos_all);
-    concat_dev_vec(memb_data.cstate.dv, non_memb_data.cstate.dv, cstate_all);
-    concat_dev_vec(memb_data.cattr.dv, non_memb_data.cattr.dv, cattr_all);
+    //concat_dev_vec(memb_data.cstate.dv, non_memb_data.cstate.dv, cstate_all);
+    //concat_dev_vec(memb_data.cattr.dv, non_memb_data.cattr.dv, cattr_all);
     CUDA_SAFE_CALL(cudaGetLastError());
-    cudaTextureObject_t ct;
-    cudaResourceDesc resDesc = make_real4_resource_desc(get_device_pos_all(), all_size());
-    cudaTextureDesc texDesc;
-    memset(&texDesc, 0, sizeof(texDesc));
-    texDesc.readMode = cudaReadModeElementType;
 
-    cudaCreateTextureObject(&ct, &resDesc, &texDesc, NULL);
-    pos_tex = ct;
+    size_t asz = all_size();
+    nm_filter.resize(asz);
+
+    cpos_all_out.resize(asz);
+
+    refresh_pos_tex();
+
+    
+}
+void CellManager::fetch()
+{
+    verify_host_internal_state();
+    memb_data.cattr.fetch();
+    non_memb_data.cattr.fetch();
+
+    thrust::copy(cpos_all.begin(), cpos_all.begin() + memb_size(), memb_data.cpos.hv.begin());
+    thrust::copy(cpos_all.begin() + memb_size(), cpos_all.end(), non_memb_data.cpos.hv.begin());
     
 }
 bool operator== (const CellManager &c1, const CellManager &oc)
@@ -367,6 +414,11 @@ void CellManager::verify_host_internal_state()const
         printf("mnum:%d\n", mconn.hv.size());
         throw std::runtime_error("Memb num incorrect.");
     }
+}
+
+void CellManager::clear_all_non_memb_conn_both()
+{
+    nmconn.memset_zero_both();
 }
 
 CellManager::CellAccessor CellManager::get_memb_host(int idx)
@@ -422,6 +474,53 @@ void CellManager::output(std::string out)
     ofs.write(&cbuf[0], osize);
 
 
+}
+
+
+
+void CellManager::output_old(std::string out)
+{
+    //for dbg
+    struct __output_old_fn {
+        static void out(const CellManager::CellAccessor& cacc, std::ofstream& wfile,int idx) {
+            using namespace std;
+            wfile << idx << " "
+                << *cacc.state << " "
+                << fixed << setprecision(15) << cacc.attr->radius << " "
+                << fixed << setprecision(15) << cacc.attr->ageb << " "
+                << fixed << setprecision(15) << cacc.attr->agek << " "
+                << fixed << setprecision(15) << cacc.attr->ca2p_avg << " " //ca2p
+                << fixed << setprecision(15) << cacc.pos->x << " "
+                << fixed << setprecision(15) << cacc.pos->y << " "
+                << fixed << setprecision(15) << cacc.pos->z << " "
+                << fixed << setprecision(15) << cacc.attr->ca2p_avg << " "
+                << cacc.attr->rest_div_times << " "
+                << fixed << setprecision(15) << cacc.attr->ex_fat << " "
+                << fixed << setprecision(15) << cacc.attr->in_fat << " "
+                << (cacc.attr->is_touch ? 1 : 0) << " "
+                << fixed << setprecision(15) << cacc.attr->spr_nat_len << " "
+                << (int)(cacc.attr->pair <0 ? (int)-1 : (int)(cacc.attr->pair)) << " "
+                << cacc.attr->fix_origin << " " << (int)(cacc.attr->nullified ? (int)1 : (int)0) << " "
+                << (int)(cacc.attr->is_malignant ? 1 : 0)
+
+                << std::endl;
+        }
+    };
+    std::ofstream wfile(out);
+    if (!wfile) {
+        std::cout << "Output file creation error. Filename:" << out << std::endl;
+        exit(1);
+    }
+    const size_t ms = memb_size();
+    for (int i = 0; i < ms; i++) {
+        __output_old_fn::out(get_memb_host(i), wfile, i);
+    }
+
+    const size_t nms = non_memb_size();
+    for (int i = 0; i < nms; i++) {
+        __output_old_fn::out(get_non_memb_host(i), wfile, i+ms);
+    }
+    
 }
 
 void CellManager::add_cell_host(const CellAccessor * cacc)
@@ -496,7 +595,7 @@ void CellManager::refresh_memb_conn_host()
 
 
 
-CellManager::CellManager()
+CellManager::CellManager():nm_filter(this)
 {
 }
 

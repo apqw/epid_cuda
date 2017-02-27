@@ -7,7 +7,7 @@
 
 #ifndef LFSTACK_H_
 #define LFSTACK_H_
-
+//if T is zero-fillable,this is also zero-fillable
 template<typename T,unsigned N>
 class LFStack {
 

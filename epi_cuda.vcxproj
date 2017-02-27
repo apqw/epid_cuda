@@ -176,7 +176,10 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <FileType>CppCode</FileType>
     </CudaCompile>
     <ClCompile Include="src\helper.cpp" />
-    <ClCompile Include="src\main.cpp" />
+    <CudaCompile Include="src\cell_movement.cu" />
+    <CudaCompile Include="src\main.cu">
+      <FileType>CppCode</FileType>
+    </CudaCompile>
     <ClCompile Include="src\pbuf\cell.pb.cc" />
     <CudaCompile Include="src\cell_connection.cu">
       <FileType>CppCode</FileType>
@@ -193,6 +196,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="include\lz4\lz4frame.h" />
     <ClInclude Include="include\lz4\lz4hc.h" />
     <ClInclude Include="src\cell_connection.h" />
+    <ClInclude Include="src\cell_movement.h" />
     <ClInclude Include="src\CubicDynArr.h" />
     <ClInclude Include="src\CellManager.h" />
     <ClInclude Include="src\cuda_helper_misc.h" />

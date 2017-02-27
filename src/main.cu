@@ -4,6 +4,7 @@
 #include "CellManager.h"
 #include "cuda_test.h"
 #include "cell_connection.h"
+#include "cell_movement.h"
 #include <cmdline/cmdline.h>
 #include <iostream>
 #include <fstream>
@@ -36,6 +37,16 @@ int main(int argc,char**argv) {
     connect_cell(cm);
     cudaDeviceSynchronize();
     CUDA_SAFE_CALL(cudaGetLastError());
+
+    for (int i = 0; i < 1; i++) {
+        calc_cell_movement(cm);
+        CUDA_SAFE_CALL(cudaGetLastError());
+        if (i % 10000 == 0) {
+            cm.fetch();
+            cm.output_old(std::to_string(i));
+            printf("out %d", i);
+        }
+    }
     std::cout << "End." << std::endl;
 
     google::protobuf::ShutdownProtobufLibrary();

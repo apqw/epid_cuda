@@ -6,6 +6,8 @@
 #include "math_helper.h"
 #include "cell_connection.h"
 #include "CellManager.h"
+#include <cfloat>
+#include <thrust/count.h>
 
 /** グリッドサイズ*/
 static constexpr real AREA_GRID_ORIGINAL = 2.0;//ok
@@ -78,7 +80,6 @@ __global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* nmconn, Cu
                         const real rad_sum = oi >= nmemb_start ? NON_MEMB_RAD + NON_MEMB_RAD : MEMB_RAD + NON_MEMB_RAD;
                         if (p_dist_sq(cp, ocp) <= LJ_THRESH*LJ_THRESH*rad_sum*rad_sum) {
                             nmconn[index-nmemb_start].conn.push_back_d(oi);
-                           // printf("eeey %d <-> %d\n", index, oi);
                         }
                     }
                 }
@@ -87,17 +88,52 @@ __global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* nmconn, Cu
     }
 }
 
+__global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, const NonMembConn* nmconn,const CellIndex* fix_musume_filtered,size_t nm_start,size_t sz) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < sz) {
+        //const int raw_index = index - nmemb_start;
+        const int nm_idx = fix_musume_filtered[index]-nm_start;
+            real d1sq = REAL_MAX;
+            //real distsq = real{ 0.0 };
+            int dermis_idx = -1;
+            const NonMembConn& nmc = nmconn[nm_idx];
+            const int nmc_sz = nmc.conn.size();
+            for (int i = 0; i < nmc_sz; i++) {
+                const int raw_conn_idx = nmc.conn[i];
+                if (raw_conn_idx  < nm_start) {//memb
+                    const real distsq = p_dist_sq(tex1Dfetch_real4(pos_tex, raw_conn_idx), tex1Dfetch_real4(pos_tex, nm_idx + nm_start));
+                    if (distsq < d1sq) {
+                        d1sq = distsq;
+                        dermis_idx = raw_conn_idx;
+                    }
+                }
+
+            }
+            nm_cattr[nm_idx].dermis = dermis_idx;
+    }
+}
+
+#define grid_init_THREAD_NUM (64)
+#define connect_proc_THREAD_NUM (128)
+
+
 void connect_cell(CellManager & cman)
 {
     static CubicDynArrGenerator<LFStack<int, N3>> area(ANX, ANY, ANZ);
     area.memset_zero();
+    cman.clear_all_non_memb_conn_both();
 
     size_t sz = cman.all_size();
+    size_t nm_start = cman.memb_size();
 
-    grid_init<<<sz/64+1,64>>>(cman.get_pos_tex(), area.acc, sz);
-    cudaDeviceSynchronize();
-    CUDA_SAFE_CALL(cudaGetLastError());
-    connect_proc << <sz / 128 + 1, 128 >> >(cman.get_pos_tex(),cman.get_device_nmconn(), area.acc,cman.memb_size(), sz);
+    grid_init<<<sz/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(), area.acc, sz);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    //CUDA_SAFE_CALL(cudaGetLastError());
+    connect_proc << <sz / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_nmconn(), area.acc, nm_start, sz);
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+    int flt_num = 0;
+    const CellIndex* ci=cman.nm_filter.filter_by_state<FIX, MUSUME>(&flt_num);
+    find_dermis << <flt_num / 64 + 1, 64 >> > (cman.get_pos_tex(), cman.get_device_nmattr(), cman.get_device_nmconn(), ci, nm_start, flt_num);
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
 }
