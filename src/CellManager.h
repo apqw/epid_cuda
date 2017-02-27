@@ -97,7 +97,7 @@ class CellManager
     CellDataSet memb_data; CellDataSet non_memb_data;
 
     dhv_pair<MembConn> mconn; dhv_pair<NonMembConn> nmconn;
-
+   // dhv_pair<NonMembConn> memb_nmconn;
     //maybe read_only
     thrust::device_vector<CellPos> cpos_all;
     //thrust::device_vector<CELL_STATE> cstate_all;

@@ -48,6 +48,9 @@ using CellIndex = int;
 #define NON_MEMB_RAD real(1.4)
 static constexpr real MEMB_RAD_SUM = (MEMB_RAD + MEMB_RAD);
 static constexpr real MEMB_RAD_SUM_SQ = (MEMB_RAD_SUM*MEMB_RAD_SUM);
+static constexpr real NON_MEMB_RAD_SUM = (NON_MEMB_RAD + NON_MEMB_RAD);
+static constexpr real delta_R = real(0.4)*NON_MEMB_RAD;
+static constexpr real para_ljp2 = 0.005;
 #define DT_Cell real(0.01)
 #define KBEND real(0.5*20.0)
 #define eps_m real(0.01)
