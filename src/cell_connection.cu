@@ -25,7 +25,7 @@ static constexpr int	ANZ = (int)((real)LZ / AREA_GRID_ORIGINAL);//ok
                                                                             /** ÉOÉäÉbÉh1Ç¬ìñÇΩÇËÇÃç◊ñEäiî[êîè„å¿ */
 static constexpr int	N3 = 200; //max grid cell num //ok
                                   /** 1ç◊ñEÇÃê⁄ë±ç≈ëÂêî */
-static constexpr int	N2 = 400; //max conn num //ok
+//static constexpr int	N2 = 400; //max conn num //ok
 
 __global__ void grid_init(cudaTextureObject_t pos_tex,CubicDynArrAccessor<LFStack<int, N3>> darr,size_t sz) {
     //need memset
@@ -136,7 +136,7 @@ __global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* all_nm_con
         
     }
 }
-
+/*
 __global__ void connect_proc2(cudaTextureObject_t pos_tex, NonMembConn* all_nm_conn, int nmemb_start, size_t sz) {
     const int index = nmemb_start + blockIdx.x * blockDim.x + threadIdx.x;
     static constexpr int srange = 2;
@@ -151,7 +151,7 @@ __global__ void connect_proc2(cudaTextureObject_t pos_tex, NonMembConn* all_nm_c
         }
     }
 }
-
+*/
 __global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, const NonMembConn* all_nm_conn,const CellIndex* fix_musume_filtered,size_t nm_start,size_t sz) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < sz) {
@@ -189,9 +189,9 @@ void connect_cell(CellManager & cman)
     size_t sz = cman.all_size();
     size_t nm_start = cman.memb_size();
 
-    grid_init<<<sz/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(), area.acc, sz);
+    grid_init<<<((unsigned int)sz)/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(), area.acc, sz);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    connect_proc << <TH_MULTI*(sz- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, nm_start, sz);
+    connect_proc << <TH_MULTI*unsigned(sz- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), sz);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
    // connect_proc2 << <(sz - nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(), cman.get_device_all_nm_conn(), nm_start, sz);
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());

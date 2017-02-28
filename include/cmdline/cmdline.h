@@ -26,6 +26,7 @@
 */
 
 #pragma once
+#pragma warning( push, 1)
 
 #include <iostream>
 #include <sstream>
@@ -659,7 +660,7 @@ private:
                          const std::string &desc)
       :nam(name), snam(short_name), desc(desc), has(false){
     }
-    ~option_without_value(){}
+    //~option_without_value(){}
 
     bool has_value() const { return false; }
 
@@ -719,7 +720,7 @@ private:
       , def(def), actual(def) {
       this->desc=full_description(desc);
     }
-    ~option_with_value(){}
+    //~option_with_value(){}
 
     const T &get() const {
       return actual;
@@ -822,3 +823,4 @@ private:
 };
 
 } // cmdline
+#pragma warning( pop )

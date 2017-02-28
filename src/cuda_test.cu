@@ -19,5 +19,5 @@ void cm_disp_test(CellManager& cm) {
     texDesc.readMode = cudaReadModeElementType;
 
     cudaCreateTextureObject(&ct, &resDesc, &texDesc, NULL);
-    cm_disp_ker << <128, 128 >> > (cm.get_device_pos_all(), cm.all_size(),ct);
+    cm_disp_ker << <128, 128 >> > (cm.get_device_pos_all(), int(cm.all_size()),ct);
 }

@@ -186,26 +186,26 @@ public:
         
         template<CELL_STATE...state_Or>
         const CellIndex* filter_by_state(int*num) {
-            size_t msz = parent->memb_size();
+            const int msz = int( parent->memb_size() );
             
             thrust::device_vector<CellIndex>::iterator out_end = 
                 thrust::copy_if(thrust::make_counting_iterator<int>(msz)
-                , thrust::make_counting_iterator<int>(parent->all_size())
+                    , thrust::make_counting_iterator<int>(int( parent->all_size() ))
                 , filtered_result.begin()
                 , CstPred<state_Or...>(parent->get_device_non_memb_state(),-msz));
                 
-            *num = thrust::distance(filtered_result.begin(), out_end);
+            *num = int( thrust::distance(filtered_result.begin(), out_end) );
             return thrust::raw_pointer_cast(&filtered_result[0]);
         }
 
         const CellIndex* filter_by_pair(int*num) {
-            size_t msz = parent->memb_size();
+            const int msz = int(parent->memb_size());
             thrust::device_vector<CellIndex>::iterator out_end =
                 thrust::copy_if(thrust::make_counting_iterator<int>(msz)
-                    , thrust::make_counting_iterator<int>(parent->all_size())
+                    , thrust::make_counting_iterator<int>(int( parent->all_size() ))
                     , filtered_result.begin()
                     , PairPred(parent->get_device_nmattr(), -msz));
-            *num = thrust::distance(filtered_result.begin(), out_end);
+            *num = int( thrust::distance(filtered_result.begin(), out_end) );
             return thrust::raw_pointer_cast(&filtered_result[0]);
         }
 

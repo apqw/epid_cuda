@@ -116,14 +116,15 @@ static bool verify_pb_data(const CellDataPB::CellSet* cs) {
         CELL_STATE current_state = CELL_STATE(cell.state());
         if (i == 0 && current_state != MEMB) {
             throw std::runtime_error("Memb data not found.");
-            return false;
+            //return false;
         }
         if (last_state != MEMB && current_state == MEMB) {
             throw std::runtime_error("Invalid data order. Memb data is found after non-memb data.");
-            return false;
+            //return false;
         }
         last_state = current_state;
     }
+    return true;
 }
 
 static void convCPBToNative(const CellDataPB::Cell & cell, CellManager::CellAccessor * cacc) {
@@ -176,16 +177,16 @@ void CellManager::load(std::string pb_path)
     }
 
     ifs.seekg(0, ifs.end);
-    int cinputsize = ifs.tellg();
+    size_t cinputsize = ifs.tellg();
     ifs.clear();
     ifs.seekg(0, std::ios::beg);
     std::vector<char> ibuf(cinputsize);
     ifs.read(&ibuf[0], cinputsize);
     ifs.close();
-    int dinputsize = cinputsize * 2 + 8;
+    size_t dinputsize = cinputsize * 2 + 8;
     std::vector<char> decbuf(dinputsize);
     int dsz = 0;
-    while ((dsz = LZ4_decompress_safe(&ibuf[0], &decbuf[0], cinputsize, dinputsize)) < 0) {
+    while ((dsz = LZ4_decompress_safe(&ibuf[0], &decbuf[0], int(cinputsize), int(dinputsize))) < 0) {
         dinputsize *= 2;
         decbuf.resize(dinputsize);
     }
@@ -222,9 +223,9 @@ void CellManager::load_old(std::string old_data_path)
         throw std::runtime_error("Failed to open the following file:" + old_data_path);
     }
     std::string line;
-    unsigned int phase = 0;
-    int nmemb = 0;
-    int nder = 0;
+    //unsigned int phase = 0;
+    //int nmemb = 0;
+    //int nder = 0;
     CellPos cp;
     CELL_STATE cst;
     CellAttr cat;
@@ -413,7 +414,7 @@ void CellManager::verify_host_internal_state()const
     */
     bool memb_num_correct = mconn.hv.size() == MEMB_NUM_X*MEMB_NUM_Y;
     if (!memb_num_correct) {
-        printf("mnum:%d\n", mconn.hv.size());
+        printf("mnum:%zu\n", mconn.hv.size());
         throw std::runtime_error("Memb num incorrect.");
     }
 }
@@ -471,7 +472,7 @@ void CellManager::output(std::string out)
     }
     std::vector<char> cbuf(obuf.size());
     int osize = 0;
-    if ((osize = LZ4_compress_default(obuf.c_str(), &cbuf[0], obuf.size(), obuf.size())) <= 0) {
+    if ((osize = LZ4_compress_default(obuf.c_str(), &cbuf[0], int(obuf.size()), int(obuf.size()))) <= 0) {
         throw std::runtime_error("Failed to compress cell data.");
     }
     ofs.write(&cbuf[0], osize);
@@ -520,8 +521,8 @@ void CellManager::output_old(std::string out)
     }
 
     const size_t nms = non_memb_size();
-    for (int i = 0; i < nms; i++) {
-        __output_old_fn::out(get_non_memb_host(i), wfile, i+ms);
+    for (size_t i = 0; i < nms; i++) {
+        __output_old_fn::out(get_non_memb_host(int(i)), wfile, int(i+ms));
     }
     
 }
@@ -552,7 +553,7 @@ void CellManager::refresh_memb_conn_host()
     for (int j = 0; j < mbsz; j++) {
 
         size_t jj = j%MEMB_NUM_X;
-        size_t kk = j / MEMB_NUM_X;
+        //size_t kk = j / MEMB_NUM_X;
         MembConn& mb = mconn.hv[j];
         if (jj == 0) {
             mb.conn[3] = j + MEMB_NUM_X - 1;
@@ -573,12 +574,12 @@ void CellManager::refresh_memb_conn_host()
 
     for (int j = 0; j < mbsz; j++) {
 
-        size_t jj = j%MEMB_NUM_X;
+        //size_t jj = j%MEMB_NUM_X;
         size_t kk = j / MEMB_NUM_X;
         MembConn& mb = mconn.hv[j];
 
-        size_t top = (j - MEMB_NUM_X + mbsz) % mbsz;
-        size_t bot = (j + MEMB_NUM_X) % mbsz;
+        int top = int( (j - MEMB_NUM_X + mbsz) % mbsz );
+        int bot = int( (j + MEMB_NUM_X) % mbsz );
 
         if (kk % 2 == 0) {
             mb.conn[1] = top;

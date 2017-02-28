@@ -27,7 +27,7 @@ public:
 	__device__ void clear_d(){
 		atomicExch(&head,0);
 	};
-	__host__ __device__ const int size()const{
+	__host__ __device__ int size()const{
 		return head;
 	};
 	__host__ __device__ T& operator[](int idx){
