@@ -38,11 +38,19 @@ enum CELL_STATE :CELL_STATE_internal {
 };
 
 using CellIndex = int;
+using CMask_t = int;
 #define MEMB_NUM_X (100)
 #define MEMB_NUM_Y (114)
-#define LX real(50.0)
-#define LY real(50.0)
-#define LZ real(100.0)
+static constexpr real  LX = real(50.0);
+static constexpr real  LY = real(50.0);
+static constexpr real  LZ = real(100.0);
+static constexpr unsigned int NX = 100;
+static constexpr unsigned int NY = 100;
+static constexpr unsigned int NZ = 200;
+static constexpr real  dx = LX/NX; static constexpr real  inv_dx = NX/LX;
+static constexpr real  dy = LY / NY; static constexpr real  inv_dy = NY / LY;
+static constexpr real  dz = LZ / NZ; static constexpr real  inv_dz = NZ / LZ;
+static constexpr real FAC_MAP = 2.0;
 #define LJ_THRESH real(1.2)
 #define MEMB_RAD real(1.0)
 #define NON_MEMB_RAD real(1.4)

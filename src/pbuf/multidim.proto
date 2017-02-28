@@ -1,0 +1,23 @@
+syntax = "proto3";
+package MultidimPB;
+	enum Dim{
+		X=0;
+		Y=1;
+		Z=2;
+	}
+message Dim3Double{
+	int32 X=1;
+	int32 Y=2;
+	int32 Z=3;
+
+	repeated Dim dim_order=5;
+	repeated double data=4 [packed=true]; //flatten
+}
+
+message Dim3Float{
+	int32 X=1;
+	int32 Y=2;
+	int32 Z=3;
+	repeated Dim dim_order=5;
+	repeated float data=4 [packed=true]; //flatten
+}

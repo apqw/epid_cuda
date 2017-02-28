@@ -45,8 +45,7 @@ __global__ void grid_init(cudaTextureObject_t pos_tex,CubicDynArrAccessor<LFStac
     }
 }
 
-#define _m_max(a,b) ((a)>(b)?(a):(b))
-#define _m_min(a,b) ((a)<(b)?(a):(b))
+
 
 #define grid_init_THREAD_NUM (64)
 #define connect_proc_THREAD_NUM (128)

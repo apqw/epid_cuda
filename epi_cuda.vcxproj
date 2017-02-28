@@ -172,6 +172,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\pbuf\multidim.pb.cc" />
     <CudaCompile Include="src\CellManager.cu">
       <FileType>CppCode</FileType>
     </CudaCompile>
@@ -190,6 +191,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <CudaCompile Include="src\cuda_test.cu">
       <FileType>CppCode</FileType>
     </CudaCompile>
+    <CudaCompile Include="src\map.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\lz4\lz4.h" />
@@ -204,8 +206,10 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="src\define.h" />
     <ClInclude Include="src\helper.h" />
     <ClInclude Include="src\LFStack.h" />
+    <ClInclude Include="src\map.h" />
     <ClInclude Include="src\math_helper.h" />
     <ClInclude Include="src\pbuf\cell.pb.h" />
+    <ClInclude Include="src\pbuf\multidim.pb.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

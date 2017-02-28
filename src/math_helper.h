@@ -111,5 +111,7 @@ __host__ __device__ inline real min0(const real v) {
 }
 #define POW3(v) ((v)*(v)*(v))
 #define POW6(v) (POW3(v)*POW3(v))
-
+#define _m_max(a,b) ((a)>(b)?(a):(b))
+#define _m_min(a,b) ((a)<(b)?(a):(b))
+#define _m_norm_sq(x,y,z) ((x)*(x)+(y)*(y)+(z)*(z))
 #endif /* DH_HELPER_H_ */

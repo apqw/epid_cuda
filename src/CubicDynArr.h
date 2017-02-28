@@ -18,11 +18,11 @@ public:
         Z = z;
         data = ptr;
     }
-    __device__ T& at(int x, int y, int z) {
+    __host__ __device__ T& at(int x, int y, int z) {
         return data[x + X*(y + Y*z)];
     }
 
-    __device__ const T& at(int x, int y, int z)const {
+    __host__ __device__ const T& at(int x, int y, int z)const {
         return data[x + X*(y + Y*z)];
     }
 
