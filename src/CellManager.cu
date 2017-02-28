@@ -265,7 +265,7 @@ size_t CellManager::memb_size()const {
 
 size_t CellManager::non_memb_size()const {
     verify_host_internal_state();
-    return nmconn.hv.size();
+    return non_memb_data.size_on_host();
 }
 
 size_t CellManager::all_size()const {
@@ -299,9 +299,9 @@ CellAttr * CellManager::get_device_attr_all()
     return thrust::raw_pointer_cast(&cattr_all[0]);
 }
 */
-NonMembConn * CellManager::get_device_nmconn()
+NonMembConn * CellManager::get_device_all_nm_conn()
 {
-    return nmconn.get_raw_device_ptr();
+    return all_nm_conn.get_raw_device_ptr();
 }
 
 MembConn * CellManager::get_device_mconn()
@@ -349,8 +349,10 @@ void CellManager::push_to_device()
 {
     memb_data.push_to_device();
     non_memb_data.push_to_device();
-    mconn.push_to_device(); nmconn.push_to_device();
+    mconn.push_to_device(); 
+    all_nm_conn.push_to_device();
     concat_dev_vec(memb_data.cpos.dv, non_memb_data.cpos.dv, cpos_all);
+    
     //concat_dev_vec(memb_data.cstate.dv, non_memb_data.cstate.dv, cstate_all);
     //concat_dev_vec(memb_data.cattr.dv, non_memb_data.cattr.dv, cattr_all);
     CUDA_SAFE_CALL(cudaGetLastError());
@@ -359,7 +361,7 @@ void CellManager::push_to_device()
     nm_filter.resize(asz);
 
     cpos_all_out.resize(asz);
-
+    thrust::copy(cpos_all.begin(), cpos_all.end(), cpos_all_out.begin());
     refresh_pos_tex();
 
     
@@ -379,7 +381,7 @@ bool operator== (const CellManager &c1, const CellManager &oc)
     bool eq_md = c1.memb_data == oc.memb_data;
     bool eq_nmd = c1.non_memb_data == oc.non_memb_data;
     bool eq_mconn = std::equal(c1.mconn.hv.begin(), c1.mconn.hv.end(), oc.mconn.hv.begin(), oc.mconn.hv.end());
-    bool eq_nmconn = std::equal(c1.nmconn.hv.begin(), c1.nmconn.hv.end(), oc.nmconn.hv.begin(), oc.nmconn.hv.end());
+    bool eq_nmconn = std::equal(c1.all_nm_conn.hv.begin(), c1.all_nm_conn.hv.end(), oc.all_nm_conn.hv.begin(), oc.all_nm_conn.hv.end());
 #ifdef CM_EQUALITY_DBG
     std::cout << "CellManager Equality Dbg:" << std::endl;
     std::cout << "eq_md:" << eq_md << std::endl;
@@ -400,7 +402,7 @@ void CellManager::verify_host_internal_state()const
         throw std::runtime_error("The following 2 vectors' size are mismatching. memb_data:"_s
             + std::to_string(memb_data.size_on_host()) + " mconn:" + std::to_string(mconn.hv.size()));
     }
-
+    /*
     bool non_memb_size_match =
         (non_memb_data.size_on_host() == nmconn.hv.size());
 
@@ -408,7 +410,7 @@ void CellManager::verify_host_internal_state()const
         throw std::runtime_error("The following 2 vectors' size are mismatching. non_memb_data:"_s
             + std::to_string(non_memb_data.size_on_host()) + " nmconn:" + std::to_string(nmconn.hv.size()));
     }
-
+    */
     bool memb_num_correct = mconn.hv.size() == MEMB_NUM_X*MEMB_NUM_Y;
     if (!memb_num_correct) {
         printf("mnum:%d\n", mconn.hv.size());
@@ -418,7 +420,7 @@ void CellManager::verify_host_internal_state()const
 
 void CellManager::clear_all_non_memb_conn_both()
 {
-    nmconn.memset_zero_both();
+    all_nm_conn.memset_zero_both();
 }
 
 CellManager::CellAccessor CellManager::get_memb_host(int idx)
@@ -427,6 +429,7 @@ CellManager::CellAccessor CellManager::get_memb_host(int idx)
     cat.state = &memb_data.cstate.hv[idx];
     cat.pos = &memb_data.cpos.hv[idx];
     cat.mconn = &mconn.hv[idx];
+    cat.nmconn = &all_nm_conn.hv[idx];
     cat.attr = &memb_data.cattr.hv[idx];
     return cat;
 }
@@ -436,7 +439,7 @@ CellManager::CellAccessor CellManager::get_non_memb_host(int idx)
     CellAccessor cat;
     cat.state = &non_memb_data.cstate.hv[idx];
     cat.pos = &non_memb_data.cpos.hv[idx];
-    cat.nmconn = &nmconn.hv[idx];
+    cat.nmconn = &all_nm_conn.hv[idx+memb_size()];
     cat.attr = &non_memb_data.cattr.hv[idx];
     return cat;
 }
@@ -536,9 +539,9 @@ void CellManager::add_cell_host(const CellAccessor * cacc)
         non_memb_data.cpos.hv.push_back(*cacc->pos);
         non_memb_data.cstate.hv.push_back(*cacc->state);
         non_memb_data.cattr.hv.push_back(*cacc->attr);
-        nmconn.hv.push_back(NonMembConn());
+        
     }
-
+    all_nm_conn.hv.push_back(NonMembConn());
 }
 
 void CellManager::refresh_memb_conn_host()

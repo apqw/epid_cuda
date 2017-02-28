@@ -96,8 +96,9 @@ class CellManager
 {
     CellDataSet memb_data; CellDataSet non_memb_data;
 
-    dhv_pair<MembConn> mconn; dhv_pair<NonMembConn> nmconn;
-   // dhv_pair<NonMembConn> memb_nmconn;
+    dhv_pair<MembConn> mconn; 
+    //dhv_pair<NonMembConn> nmconn;
+    dhv_pair<NonMembConn> all_nm_conn;
     //maybe read_only
     thrust::device_vector<CellPos> cpos_all;
     //thrust::device_vector<CELL_STATE> cstate_all;
@@ -133,7 +134,7 @@ public:
     //const CELL_STATE* get_device_state_all();
     //const CellAttr* get_device_attr_all();
     CELL_STATE* get_device_non_memb_state();
-    NonMembConn* get_device_nmconn();
+    NonMembConn* get_device_all_nm_conn();
     MembConn* get_device_mconn();
     CellAttr* get_device_nmattr();
     cudaTextureObject_t get_pos_tex();
@@ -169,6 +170,15 @@ public:
                 return sor;
             }
         };
+
+        struct PairPred {
+            const CellAttr* nmcat;
+            const int offset;
+            PairPred(const CellAttr* _ptr, int _offset = 0) :nmcat(_ptr), offset(_offset) {}
+            __host__ __device__ bool operator()(const int i)const {
+                return nmcat[i + offset].pair >= 0;
+            }
+        };
         NonMembIndexFilter(CellManager* _cm):parent(_cm){}
         void resize(size_t s) {
             filtered_result.resize(s);
@@ -187,6 +197,18 @@ public:
             *num = thrust::distance(filtered_result.begin(), out_end);
             return thrust::raw_pointer_cast(&filtered_result[0]);
         }
+
+        const CellIndex* filter_by_pair(int*num) {
+            size_t msz = parent->memb_size();
+            thrust::device_vector<CellIndex>::iterator out_end =
+                thrust::copy_if(thrust::make_counting_iterator<int>(msz)
+                    , thrust::make_counting_iterator<int>(parent->all_size())
+                    , filtered_result.begin()
+                    , PairPred(parent->get_device_nmattr(), -msz));
+            *num = thrust::distance(filtered_result.begin(), out_end);
+            return thrust::raw_pointer_cast(&filtered_result[0]);
+        }
+
         
     };
     NonMembIndexFilter nm_filter;

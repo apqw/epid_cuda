@@ -48,22 +48,36 @@ __global__ void grid_init(cudaTextureObject_t pos_tex,CubicDynArrAccessor<LFStac
 #define _m_max(a,b) ((a)>(b)?(a):(b))
 #define _m_min(a,b) ((a)<(b)?(a):(b))
 
-__global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* nmconn, CubicDynArrAccessor<LFStack<int, N3>> darr, int nmemb_start,size_t sz) {
+#define grid_init_THREAD_NUM (64)
+#define connect_proc_THREAD_NUM (128)
+
+#define TH_MULTI (32)
+__global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* all_nm_conn, CubicDynArrAccessor<LFStack<int, N3>> darr, int nmemb_start,size_t sz) {
     //need memset
-    const int index = nmemb_start+blockIdx.x * blockDim.x + threadIdx.x;
+    const int th_id = threadIdx.x%TH_MULTI;
+    const int index = nmemb_start+blockIdx.x * (blockDim.x/TH_MULTI) + threadIdx.x/TH_MULTI;
+    __shared__ real4 mycp[connect_proc_THREAD_NUM/TH_MULTI];
     static constexpr int srange = 2;
+    static constexpr int width = srange*2+1;
     if (index < sz) {
+        
+        if (th_id > 24)return;
+        /*
+        if (th_id==0&&index%100==0)printf("PogAndChamp %d\n",index);
+        if (th_id == 0 && index==sz-1)printf("End %d\n", index);
+        */
+        /*
         const CellPos cp = tex1Dfetch_real4(pos_tex, index);
         const int anx = (int)(cp.x * AREA_GRID_INV);
         const int any = (int)(cp.y* AREA_GRID_INV);
         const int anz = (int)(cp.z* AREA_GRID_INV);
         
         assert(!(anx >= (int)ANX || any >= (int)ANY || anz >= (int)ANZ || anx < 0 || any < 0 || anz < 0));
-        
-        const int xstart = anx - srange;
-        const int xend = anx + srange;
-        const int ystart = any - srange;
-        const int yend = any + srange;
+        //const int cw = width / TH_MULTI + th_id;
+        const int xstart = anx -srange+th_id%width;
+        const int xend = xstart;
+        const int ystart = any - srange+th_id/width;
+        const int yend = ystart;
         const int zstart = _m_max(anz - srange,0); //zstart = zstart > 0 ? zstart : 0;
         const int zend = _m_min(anz + srange, ANZ - 1); //zend = zend < ANZ - 1 ? zend : ANZ - 1;
         for (int j = xstart; j <= xend; j++) {
@@ -76,32 +90,82 @@ __global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* nmconn, Cu
                     const size_t g_sz = stref.size();
                     for (int m = 0; m < g_sz; m++) {
                         const int oi = stref[m];
+                        if (index <= oi)continue;
                         const CellPos ocp = tex1Dfetch_real4(pos_tex, oi);
                         const real rad_sum = oi >= nmemb_start ? NON_MEMB_RAD + NON_MEMB_RAD : MEMB_RAD + NON_MEMB_RAD;
                         if (p_dist_sq(cp, ocp) <= LJ_THRESH*LJ_THRESH*rad_sum*rad_sum) {
-                            nmconn[index-nmemb_start].conn.push_back_d(oi);
+                            all_nm_conn[index].conn.push_back_d(oi);
+                            all_nm_conn[oi].conn.push_back_d(index);
                         }
                     }
                 }
             }
         }
+        */
+        if(th_id==0)mycp[threadIdx.x / TH_MULTI] = tex1Dfetch_real4(pos_tex, index);
+        __syncthreads();
+        const CellPos& cp = mycp[threadIdx.x / TH_MULTI];
+        const int anx = (int)(cp.x * AREA_GRID_INV);
+        const int any = (int)(cp.y* AREA_GRID_INV);
+        const int anz = (int)(cp.z* AREA_GRID_INV);
+
+        assert(!(anx >= (int)ANX || any >= (int)ANY || anz >= (int)ANZ || anx < 0 || any < 0 || anz < 0));
+        //const int cw = width / TH_MULTI + th_id;
+        const int j = anx - srange + th_id%width;
+        const int k = any - srange + th_id / width;
+        const int zstart = _m_max(anz - srange, 0); //zstart = zstart > 0 ? zstart : 0;
+        const int zend = _m_min(anz + srange, ANZ - 1); //zend = zend < ANZ - 1 ? zend : ANZ - 1;
+            const int cj = (j + ANX) % ANX;
+                const int ck = (k + ANY) % ANY;
+                for (int cl = zstart; cl <= zend; cl++) {
+                    //const int cl = l;
+                    const LFStack<int, N3>& stref = darr.at(cj, ck, cl);
+                    const size_t g_sz = stref.size();
+                    for (int m = 0; m < g_sz; m++) {
+                        const int oi = stref[m];
+                        if (index <= oi)continue;
+                        const CellPos ocp = tex1Dfetch_real4(pos_tex, oi);
+                        const real rad_sum = oi >= nmemb_start ? NON_MEMB_RAD + NON_MEMB_RAD : MEMB_RAD + NON_MEMB_RAD;
+                        if (p_dist_sq(cp, ocp) <= LJ_THRESH*LJ_THRESH*rad_sum*rad_sum) {
+                            all_nm_conn[index].conn.push_back_d(oi);
+                            all_nm_conn[oi].conn.push_back_d(index);
+                        }
+                    }
+                }
+            
+        
     }
 }
 
-__global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, const NonMembConn* nmconn,const CellIndex* fix_musume_filtered,size_t nm_start,size_t sz) {
+__global__ void connect_proc2(cudaTextureObject_t pos_tex, NonMembConn* all_nm_conn, int nmemb_start, size_t sz) {
+    const int index = nmemb_start + blockIdx.x * blockDim.x + threadIdx.x;
+    static constexpr int srange = 2;
+    if (index < sz) {
+        const NonMembConn& nmc = all_nm_conn[index];
+        const size_t csz = nmc.conn.size();
+        for (int i = 0; i < csz; i++) {
+            const int oi = nmc.conn[i];
+            if (oi < nmemb_start) {
+                all_nm_conn[oi].conn.push_back_d(index);
+            }
+        }
+    }
+}
+
+__global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, const NonMembConn* all_nm_conn,const CellIndex* fix_musume_filtered,size_t nm_start,size_t sz) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < sz) {
         //const int raw_index = index - nmemb_start;
-        const int nm_idx = fix_musume_filtered[index]-nm_start;
+        const int raw_idx = fix_musume_filtered[index];
             real d1sq = REAL_MAX;
             //real distsq = real{ 0.0 };
             int dermis_idx = -1;
-            const NonMembConn& nmc = nmconn[nm_idx];
+            const NonMembConn& nmc = all_nm_conn[raw_idx];
             const int nmc_sz = nmc.conn.size();
             for (int i = 0; i < nmc_sz; i++) {
                 const int raw_conn_idx = nmc.conn[i];
                 if (raw_conn_idx  < nm_start) {//memb
-                    const real distsq = p_dist_sq(tex1Dfetch_real4(pos_tex, raw_conn_idx), tex1Dfetch_real4(pos_tex, nm_idx + nm_start));
+                    const real distsq = p_dist_sq(tex1Dfetch_real4(pos_tex, raw_conn_idx), tex1Dfetch_real4(pos_tex, raw_idx));
                     if (distsq < d1sq) {
                         d1sq = distsq;
                         dermis_idx = raw_conn_idx;
@@ -109,12 +173,11 @@ __global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, con
                 }
 
             }
-            nm_cattr[nm_idx].dermis = dermis_idx;
+            nm_cattr[raw_idx-nm_start].dermis = dermis_idx;
     }
 }
 
-#define grid_init_THREAD_NUM (64)
-#define connect_proc_THREAD_NUM (128)
+
 
 
 void connect_cell(CellManager & cman)
@@ -128,12 +191,14 @@ void connect_cell(CellManager & cman)
 
     grid_init<<<sz/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(), area.acc, sz);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    connect_proc << <sz / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_nmconn(), area.acc, nm_start, sz);
+    connect_proc << <TH_MULTI*(sz- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, nm_start, sz);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
+   // connect_proc2 << <(sz - nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(), cman.get_device_all_nm_conn(), nm_start, sz);
+   // CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     int flt_num = 0;
     const CellIndex* ci=cman.nm_filter.filter_by_state<FIX, MUSUME>(&flt_num);
-    find_dermis << <flt_num / 64 + 1, 64 >> > (cman.get_pos_tex(), cman.get_device_nmattr(), cman.get_device_nmconn(), ci, nm_start, flt_num);
+    find_dermis << <flt_num / 64 + 1, 64 >> > (cman.get_pos_tex(), cman.get_device_nmattr(), cman.get_device_all_nm_conn(), ci, nm_start, flt_num);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
 }
