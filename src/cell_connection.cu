@@ -153,30 +153,32 @@ __global__ void connect_proc2(cudaTextureObject_t pos_tex, NonMembConn* all_nm_c
 */
 #define find_dermis_THREAD_NUM (64)
 #define FD_MULTI (32)
-__global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, const NonMembConn* all_nm_conn,const CellIndex* fix_musume_filtered,size_t nm_start,size_t sz) {
+__global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* cattr, const NonMembConn* all_nm_conn,const CellIterateRange cir,int mbsz) {
 
     const int index = threadIdx.x / FD_MULTI + blockIdx.x*blockDim.x / FD_MULTI;
     const int th_id = threadIdx.x%FD_MULTI;
     const int b_id = threadIdx.x / FD_MULTI;
     __shared__ real4 mypos_sh[find_dermis_THREAD_NUM/ FD_MULTI];
-    __shared__ int rci_sh[find_dermis_THREAD_NUM/ FD_MULTI];
+    //__shared__ int rci_sh[find_dermis_THREAD_NUM/ FD_MULTI];
     __shared__ size_t connsz_sh[find_dermis_THREAD_NUM/ FD_MULTI];
     __shared__ int min_idx[find_dermis_THREAD_NUM];
     __shared__ real min_sq[find_dermis_THREAD_NUM];
     //__shared__ real4 out_dr[MUSUME_TH];
 	//const int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= sz)return;
+    
+    if (index >= cir.size)return;
+    const int raw_idx = cir.idx_full(index);
     if(th_id==0){
-    	rci_sh[b_id]=fix_musume_filtered[index];
-    	connsz_sh[b_id] = all_nm_conn[rci_sh[b_id]].conn.size();
-    	mypos_sh[b_id] = tex1Dfetch_real4(pos_tex, rci_sh[b_id]);
+    	//rci_sh[b_id]=fix_musume_filtered[index];
+    	connsz_sh[b_id] = all_nm_conn[raw_idx].conn.size();
+    	mypos_sh[b_id] = tex1Dfetch_real4(pos_tex, raw_idx);
     	for(int i=0;i<find_dermis_THREAD_NUM;i++){
     		min_sq[i]=REAL_MAX;
     		min_idx[i]=-1;
     	}
     }
     __syncthreads();
-    const int raw_idx = rci_sh[b_id];
+    //const int raw_idx = rci_sh[b_id];
         const NonMembConn& nmc = all_nm_conn[raw_idx];
         const size_t nmc_sz = connsz_sh[b_id];
         if(nmc_sz<=th_id)return;
@@ -190,7 +192,7 @@ __global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, con
             //const int nmc_sz = nmc.conn.size();
             for (int i = th_id; i < nmc_sz; i+=FD_MULTI) {
                 const int raw_conn_idx = nmc.conn[i];
-                if (raw_conn_idx  < nm_start) {//memb
+                if (raw_conn_idx  < mbsz) {//memb
                     const real distsq = p_dist_sq(tex1Dfetch_real4(pos_tex, raw_conn_idx), mypos);
                     if (distsq < min_sq[threadIdx.x]) {
                     	min_sq[threadIdx.x] = distsq;
@@ -214,7 +216,7 @@ __global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, con
             	}
 
             if(th_id==0){
-            nm_cattr[raw_idx-nm_start].dermis = min_idx[0+b_id*FD_MULTI];
+            cattr[raw_idx].dermis = min_idx[0+b_id*FD_MULTI];
             }
 
 }
@@ -232,15 +234,17 @@ void connect_cell(CellManager & cman)
     size_t nm_start = cman.memb_size();
 
     grid_init<<<((unsigned int)sz)/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(), area.acc, sz);
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
     connect_proc << <TH_MULTI*unsigned(sz- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), sz);
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    //CUDA_SAFE_CALL(cudaDeviceSynchronize());
    // connect_proc2 << <(sz - nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(), cman.get_device_all_nm_conn(), nm_start, sz);
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
     int flt_num = 0;
-    const CellIndex* ci=cman.nm_filter.filter_by_state<FIX, MUSUME>(&flt_num);
-    find_dermis << <FD_MULTI*flt_num / find_dermis_THREAD_NUM + 1, find_dermis_THREAD_NUM >> > (cman.get_pos_tex(), cman.get_device_nmattr(), cman.get_device_all_nm_conn(), ci, nm_start, flt_num);
+    //const CellIndex* ci=cman.nm_filter.filter_by_state<FIX, MUSUME>(&flt_num);
+    CellIterateRange mfcir = cman.get_cell_iterate_range<CI_MUSUME, CI_FIX>();
+    find_dermis << <FD_MULTI*mfcir.size / find_dermis_THREAD_NUM + 1, find_dermis_THREAD_NUM >> >
+        (cman.get_pos_tex(), cman.get_device_attr(), cman.get_device_all_nm_conn(), mfcir,cman.memb_size());
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
 }

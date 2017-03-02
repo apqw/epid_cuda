@@ -9,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <iomanip>
+#include <numeric>
 CellAttr::CellAttr()
     :fix_origin(-1),
     pair(-1),
@@ -261,34 +262,161 @@ void CellManager::load_old(std::string old_data_path)
 }
 size_t CellManager::memb_size()const {
     verify_host_internal_state();
-    return mconn.hv.size();
+    return _msz;
 }
 
 size_t CellManager::non_memb_size()const {
     verify_host_internal_state();
-    return non_memb_data.size_on_host();
+    return _asz - _msz;
 }
 
 size_t CellManager::all_size()const {
-    return memb_size() + non_memb_size();
+    return _asz;
+}
+
+void CellManager::_refresh_cell_pair_count()
+{
+    auto mur = get_cell_state_range<CI_MUSUME>();
+    int count = 0;
+    for (int i = mur.first; i < mur.second; i++) {
+        if (cattr_all.hv[i].pair >= 0)count++;
+    }
+    _pair_hd = _musume_hd;
+    _pair_end = count+_pair_hd;
+}
+
+void CellManager::_refresh_cell_count()
+{
+    assert(
+        cpos_all.hv.size() == cattr_all.hv.size()
+        && cattr_all.hv.size() == cstate_all.hv.size()
+        && cstate_all.hv.size() == all_nm_conn.hv.size()
+        && all_nm_conn.hv.size() == cpos_all.hv.size()
+    );
+
+    int ccount[16] = { 0 };
+    for (int i = 0; i < _asz; i++) {
+        ccount[(int)(cstate_all.hv[i])]++;
+    }
+    _fix_hd = _msz = ccount[(int)MEMB];
+    _der_hd = ccount[(int)FIX] + _fix_hd;
+    _air_hd = ccount[(int)DER] + _der_hd;
+    _dead_hd = ccount[(int)AIR] + _air_hd;
+    _alive_hd = ccount[(int)DEAD] + _dead_hd;
+    _musume_hd = ccount[(int)ALIVE] + _alive_hd;
+    _asz = cstate_all.hv.size();
+}
+
+void CellManager::_setup_order_and_count_host()
+{
+    struct st_comp {
+        const CELL_STATE* sptr;
+        st_comp(const CELL_STATE* _p):sptr(_p) {}
+        int nummap(CELL_STATE st)const {
+            switch (st) {
+            case MEMB:
+                return 0;
+            case FIX:case DUMMY_FIX:
+                return 1;
+            case DER:
+                return 2;
+            case AIR:
+                return 3;
+            case DEAD:
+                return 4;
+            case ALIVE:
+                return 5;
+            case MUSUME:
+                return 6;
+            case DISA:
+            case UNUSED:
+            case BLANK:
+                return 1024;
+            default:
+                throw std::runtime_error("Undefined cell state found.");
+            }
+        }
+        bool operator()(int v1, int v2)const {
+            return nummap(sptr[v1]) < nummap(sptr[v2]);
+        }
+    };
+    assert(
+        cpos_all.hv.size() == cattr_all.hv.size()
+        && cattr_all.hv.size() == cstate_all.hv.size()
+        && cstate_all.hv.size() == all_nm_conn.hv.size()
+        && all_nm_conn.hv.size() == cpos_all.hv.size()
+    );
+    _asz = cpos_all.hv.size();
+    std::vector<int> indices(_asz);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::stable_sort(indices.begin(), indices.end(), st_comp(&cstate_all.hv[0]));
+    thrust::host_vector<CellPos> tmp_cpos(_asz);
+    thrust::host_vector<CellAttr> tmp_cattr(_asz);
+    thrust::host_vector<CELL_STATE> tmp_cst(_asz);
+    thrust::host_vector<NonMembConn> tmp_nmconn(_asz);
+    for (int i = 0; i < _asz; i++) {
+        tmp_cpos[i] = cpos_all.hv[indices[i]];
+        tmp_cattr[i] = cattr_all.hv[indices[i]];
+        if (tmp_cattr[i].pair >= 0) tmp_cattr[i].pair = indices[tmp_cattr[i].pair];
+        tmp_cst[i] = cstate_all.hv[indices[i]];
+        tmp_nmconn[i] = all_nm_conn.hv[indices[i]];
+    }
+    cpos_all.hv.swap(tmp_cpos);
+    cattr_all.hv.swap(tmp_cattr);
+    cstate_all.hv.swap(tmp_cst);
+    all_nm_conn.hv.swap(tmp_nmconn);
+    _refresh_cell_count();
+    auto mur = get_cell_state_range<CI_MUSUME>();
+    std::iota(indices.begin()+mur.first, indices.begin() + mur.second, mur.first);
+    std::stable_partition(indices.begin() + mur.first, indices.begin() + mur.second,
+        [&](int i)->bool {
+        return cattr_all.hv[i].pair >= 0;
+    });
+    for (int i = mur.first; i < mur.second; i++) {
+        tmp_cpos[i] = cpos_all.hv[indices[i]];
+        tmp_cattr[i] = cattr_all.hv[indices[i]];
+        tmp_cst[i] = cstate_all.hv[indices[i]];
+        tmp_nmconn[i] = all_nm_conn.hv[indices[i]];
+    }
+
+    for (int i = mur.first; i < mur.second; i++) {
+        cpos_all.hv[i]= tmp_cpos[i];
+        cattr_all.hv[i]= tmp_cattr[i];
+        cstate_all.hv[i]= tmp_cst[i];
+        all_nm_conn.hv[i]=tmp_nmconn[i];
+    }
+    _refresh_cell_pair_count();
+}
+
+void CellManager::set_up_after_load()
+{
+    _setup_order_and_count_host();
+    refresh_memb_conn_host();
+    push_to_device();
 }
 
 CellPos * CellManager::get_device_pos_all()
 {
-    return thrust::raw_pointer_cast(&cpos_all[0]);
+    return thrust::raw_pointer_cast(cpos_all.dv.data());
 }
 CellPos * CellManager::get_device_pos_all_out()
 {
-    return thrust::raw_pointer_cast(&cpos_all_out[0]);
+    return thrust::raw_pointer_cast(cpos_all_out.data());
 }
 void CellManager::pos_swap_device()
 {
-    cpos_all.swap(cpos_all_out);
+    cpos_all.dv.swap(cpos_all_out);
 }
+void CellManager::correct_internal_host_state()
+{
+
+}
+/*
 CELL_STATE * CellManager::get_device_non_memb_state()
 {
-    return non_memb_data.cstate.get_raw_device_ptr();
+    return cstate_all.get_raw_device_ptr() + _msz;
 }
+*/
 /*
 CELL_STATE * CellManager::get_device_state_all()
 {
@@ -310,10 +438,16 @@ MembConn * CellManager::get_device_mconn()
     return mconn.get_raw_device_ptr();
 }
 
-CellAttr * CellManager::get_device_nmattr()
+CellAttr * CellManager::get_device_attr()
 {
-    return non_memb_data.cattr.get_raw_device_ptr();
+    return cattr_all.get_raw_device_ptr();
 }
+
+CELL_STATE * CellManager::get_device_cstate()
+{
+    return cstate_all.get_raw_device_ptr();
+}
+
 
 cudaTextureObject_t CellManager::get_pos_tex()
 {
@@ -348,21 +482,24 @@ static void concat_host_vec_into_dev_vec(const thrust::host_vector<T>& base_hvec
 */
 void CellManager::push_to_device()
 {
-    memb_data.push_to_device();
-    non_memb_data.push_to_device();
+    //memb_data.push_to_device();
+    //non_memb_data.push_to_device();
     mconn.push_to_device(); 
     all_nm_conn.push_to_device();
-    concat_dev_vec(memb_data.cpos.dv, non_memb_data.cpos.dv, cpos_all);
+    cpos_all.push_to_device();
+    cattr_all.push_to_device();
+    cstate_all.push_to_device();
+    //concat_dev_vec(memb_data.cpos.dv, non_memb_data.cpos.dv, cpos_all);
     
     //concat_dev_vec(memb_data.cstate.dv, non_memb_data.cstate.dv, cstate_all);
     //concat_dev_vec(memb_data.cattr.dv, non_memb_data.cattr.dv, cattr_all);
     CUDA_SAFE_CALL(cudaGetLastError());
 
     size_t asz = all_size();
-    nm_filter.resize(asz);
+//    nm_filter.resize(asz);
 
     cpos_all_out.resize(asz);
-    thrust::copy(cpos_all.begin(), cpos_all.end(), cpos_all_out.begin());
+    thrust::copy(cpos_all.dv.begin(), cpos_all.dv.end(), cpos_all_out.begin());
     refresh_pos_tex();
 
     
@@ -370,17 +507,17 @@ void CellManager::push_to_device()
 void CellManager::fetch()
 {
     verify_host_internal_state();
-    memb_data.cattr.fetch();
-    non_memb_data.cattr.fetch();
-
-    thrust::copy(cpos_all.begin(), cpos_all.begin() + memb_size(), memb_data.cpos.hv.begin());
-    thrust::copy(cpos_all.begin() + memb_size(), cpos_all.end(), non_memb_data.cpos.hv.begin());
+    //memb_data.cattr.fetch();
+    //non_memb_data.cattr.fetch();
+    cpos_all.fetch();
+    //thrust::copy(cpos_all.begin(), cpos_all.begin() + memb_size(), memb_data.cpos.hv.begin());
+   // thrust::copy(cpos_all.begin() + memb_size(), cpos_all.end(), non_memb_data.cpos.hv.begin());
     
 }
 bool operator== (const CellManager &c1, const CellManager &oc)
 {
-    bool eq_md = c1.memb_data == oc.memb_data;
-    bool eq_nmd = c1.non_memb_data == oc.non_memb_data;
+    bool eq_md = true;// c1.memb_data == oc.memb_data;
+    bool eq_nmd = true;// c1.non_memb_data == oc.non_memb_data;
     bool eq_mconn = std::equal(c1.mconn.hv.begin(), c1.mconn.hv.end(), oc.mconn.hv.begin());
     bool eq_nmconn = std::equal(c1.all_nm_conn.hv.begin(), c1.all_nm_conn.hv.end(), oc.all_nm_conn.hv.begin());
 #ifdef CM_EQUALITY_DBG
@@ -396,6 +533,7 @@ bool operator== (const CellManager &c1, const CellManager &oc)
 void CellManager::verify_host_internal_state()const
 {
     
+    /*
     bool memb_size_match =
         (memb_data.size_on_host() == mconn.hv.size());
 
@@ -403,6 +541,7 @@ void CellManager::verify_host_internal_state()const
         throw std::runtime_error("The following 2 vectors' size are mismatching. memb_data:"_s
             + std::to_string(memb_data.size_on_host()) + " mconn:" + std::to_string(mconn.hv.size()));
     }
+    */
     /*
     bool non_memb_size_match =
         (non_memb_data.size_on_host() == nmconn.hv.size());
@@ -412,18 +551,20 @@ void CellManager::verify_host_internal_state()const
             + std::to_string(non_memb_data.size_on_host()) + " nmconn:" + std::to_string(nmconn.hv.size()));
     }
     */
+    /*
     bool memb_num_correct = mconn.hv.size() == MEMB_NUM_X*MEMB_NUM_Y;
     if (!memb_num_correct) {
         printf("mnum:%zu\n", mconn.hv.size());
         throw std::runtime_error("Memb num incorrect.");
     }
+    */
 }
 
 void CellManager::clear_all_non_memb_conn_both()
 {
     all_nm_conn.memset_zero_both();
 }
-
+/*
 CellManager::CellAccessor CellManager::get_memb_host(int idx)
 {
     CellAccessor cat;
@@ -434,7 +575,19 @@ CellManager::CellAccessor CellManager::get_memb_host(int idx)
     cat.attr = &memb_data.cattr.hv[idx];
     return cat;
 }
+*/
 
+CellManager::CellAccessor CellManager::get_cell_acc(int idx)
+{
+    CellAccessor cat;
+    cat.state = &cstate_all.hv[idx];
+    cat.pos = &cpos_all.hv[idx];
+    cat.mconn = &mconn.hv[idx];
+    cat.nmconn = &all_nm_conn.hv[idx];
+    cat.attr = &cattr_all.hv[idx];
+    return cat;
+}
+/*
 CellManager::CellAccessor CellManager::get_non_memb_host(int idx)
 {
     CellAccessor cat;
@@ -444,7 +597,7 @@ CellManager::CellAccessor CellManager::get_non_memb_host(int idx)
     cat.attr = &non_memb_data.cattr.hv[idx];
     return cat;
 }
-
+*/
 
 void CellManager::output(std::string out)
 {
@@ -455,17 +608,18 @@ void CellManager::output(std::string out)
 
     CellDataPB::CellSet cs;
 
-    const size_t ms = memb_size();
+    //const size_t ms = memb_size();
+    const size_t asz = memb_size();
 
-
-    for (int i = 0; i < ms; i++) {
-        convNativeToCPB(get_memb_host(i), cs.add_cell());
+    for (int i = 0; i < asz; i++) {
+        convNativeToCPB(get_cell_acc(i), cs.add_cell());
     }
-
+    /*
     const size_t nms = non_memb_size();
     for (int i = 0; i < nms; i++) {
         convNativeToCPB(get_non_memb_host(i), cs.add_cell());
     }
+    */
     std::string obuf;
     if (!cs.SerializeToString(&obuf)) {
         throw std::runtime_error("Failed to serialize cell data into the following file:" + out);
@@ -516,19 +670,22 @@ void CellManager::output_old(std::string out)
         exit(1);
     }
     const size_t ms = memb_size();
-    for (int i = 0; i < ms; i++) {
-        __output_old_fn::out(get_memb_host(i), wfile, i);
+    const size_t asz = all_size();
+    for (int i = 0; i < asz; i++) {
+        __output_old_fn::out(get_cell_acc(i), wfile, i);
     }
 
+    /*
     const size_t nms = non_memb_size();
     for (size_t i = 0; i < nms; i++) {
         __output_old_fn::out(get_non_memb_host(int(i)), wfile, int(i+ms));
     }
-    
+    */
 }
 
 void CellManager::add_cell_host(const CellAccessor * cacc)
 {
+    /*
     if (*cacc->state == MEMB) {
         //assert(cacc->mconn != nullptr);
         memb_data.cpos.hv.push_back(*cacc->pos);
@@ -542,7 +699,20 @@ void CellManager::add_cell_host(const CellAccessor * cacc)
         non_memb_data.cattr.hv.push_back(*cacc->attr);
         
     }
+    */
+    cpos_all.hv.push_back(*cacc->pos);
+    cstate_all.hv.push_back(*cacc->state);
+    cattr_all.hv.push_back(*cacc->attr);
     all_nm_conn.hv.push_back(NonMembConn());
+
+    if (*cacc->state == MEMB) {
+        mconn.hv.push_back(MembConn()); 
+        //_msz++;
+    }
+    else {
+        
+    }
+    _asz++;
 }
 
 void CellManager::refresh_memb_conn_host()
@@ -599,8 +769,16 @@ void CellManager::refresh_memb_conn_host()
 
 
 
-CellManager::CellManager():nm_filter(this)
+CellManager::CellManager()
 {
+    _msz = 0;
+    _asz = 0;
+    _fix_hd = 0;
+    _der_hd = 0;
+    _air_hd = 0;
+    _dead_hd = 0;
+    _alive_hd = 0;
+    _musume_hd = 0;
 }
 
 

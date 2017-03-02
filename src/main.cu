@@ -30,10 +30,7 @@ int main(int argc,char**argv) {
     else {
         cm.load(path);
     }
-    cm.refresh_memb_conn_host();
-    std::cout << "Eee" << std::endl;
-    //for(int i=0;i<1000;i++)
-    cm.push_to_device();
+    cm.set_up_after_load();
     CubicDynArrGenerator<int> cmap1(NX, NY, NZ);
     CubicDynArrGenerator<CMask_t> cmap2(NX, NY, NZ);
     //cm_disp_test(cm);
@@ -42,9 +39,11 @@ int main(int argc,char**argv) {
     connect_cell(cm);
     cudaDeviceSynchronize();
     CUDA_SAFE_CALL(cudaGetLastError());
+    map_gen(cm, cmap1.acc, cmap2.acc);
+    CUDA_SAFE_CALL(cudaGetLastError());
     for (int i = 0; i < 10000; i++) {
+        const size_t msz = cm.memb_size();
         calc_cell_movement(cm);
-        //CUDA_SAFE_CALL(cudaGetLastError());
         if (i % 1000 == 0) {
             printf("fetching\n");
             cm.fetch();
@@ -56,7 +55,7 @@ int main(int argc,char**argv) {
     }
     
 
-    map_gen(cm, cmap1.acc, cmap2.acc);
+    
 
     std::cout << "End." << std::endl;
 
