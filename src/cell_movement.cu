@@ -5,6 +5,7 @@
 
 #include "device_launch_parameters.h"
 #include "cuda_helper_misc.h"
+#include "filter.h"
 
 template<class Fn>
 __device__ void cell_movement_calc(real4* accum_out, const real4 c1, const real4 c2, Fn calc_fn) {
@@ -300,7 +301,8 @@ __device__ inline real wall_interaction(const real cz) {
 
 ////////////// Kers
 
-__global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* cst, const MembConn* mconn, const NonMembConn* all_nm_conn, size_t sz, CellPos* out) {
+__global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* cst, const MembConn* mconn,
+    const NonMembConn* all_nm_conn, size_t sz, CellPos* out) {
     int index = threadIdx.x + blockIdx.x*blockDim.x;
     if (index >= sz)return;
     const CellPos mypos = tex1Dfetch_real4(pos_tex, index);
@@ -330,16 +332,18 @@ __global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* 
 }
 #define DER_TH (64)
 #define THREAD_DIV_DER (32)
-__global__ void DER_interaction(const cudaTextureObject_t pos_tex, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* DER_filtered, size_t nm_start, size_t sz, CellPos*out) {
+__global__ void DER_interaction(const cudaTextureObject_t pos_tex, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn,
+    const CellIndex* DER_filtered, size_t nm_start, const int* sz, CellPos*out) {
 
     const int index = threadIdx.x / THREAD_DIV_DER + blockIdx.x*blockDim.x / THREAD_DIV_DER;
+    if (index >= *sz)return;
     const int th_id = threadIdx.x%THREAD_DIV_DER;
     const int b_id = threadIdx.x / THREAD_DIV_DER;
     __shared__ real4 mypos_sh[DER_TH / THREAD_DIV_DER];
     __shared__ int rci_sh[DER_TH / THREAD_DIV_DER];
     __shared__ size_t connsz_sh[DER_TH / THREAD_DIV_DER];
     __shared__ real4 out_dr[DER_TH];
-    if (index >= sz)return;
+    
     if (th_id == 0) {
         memset(out_dr, 0x00, sizeof(out_dr));
         rci_sh[b_id] = DER_filtered[index];
@@ -392,9 +396,10 @@ __global__ void DER_interaction(const cudaTextureObject_t pos_tex, const CELL_ST
 
 
 
-__global__ void AL_AIR_DE_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* AL_AIR_DE_filtered, size_t nm_start, size_t sz, CellPos*out) {
+__global__ void AL_AIR_DE_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat,
+    const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* AL_AIR_DE_filtered, size_t nm_start, const int* sz, CellPos*out) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
-    if (index >= sz)return;
+    if (index >= *sz)return;
     const int raw_cell_index = AL_AIR_DE_filtered[index];
     const CellPos mypos = tex1Dfetch_real4(pos_tex, raw_cell_index);
     real4 dr = { real(0.0), real(0.0), real(0.0), real(0.0) };
@@ -423,16 +428,18 @@ __global__ void AL_AIR_DE_interaction(const cudaTextureObject_t pos_tex, const C
 
 #define FIX_TH (32)
 #define THREAD_DIV_FIX (32)
-__global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* FIX_filtered, size_t nm_start, size_t sz, CellPos*out) {
+__global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat,
+    const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* FIX_filtered, size_t nm_start, const int* sz, CellPos*out) {
 
     const int index = threadIdx.x / THREAD_DIV_FIX + blockIdx.x*blockDim.x / THREAD_DIV_FIX;
+    if (index >= *sz)return;
     const int th_id = threadIdx.x%THREAD_DIV_FIX;
     const int b_id = threadIdx.x / THREAD_DIV_FIX;
     __shared__ real4 mypos_sh[FIX_TH / THREAD_DIV_FIX];
     __shared__ int rci_sh[FIX_TH / THREAD_DIV_FIX];
     __shared__ size_t connsz_sh[FIX_TH / THREAD_DIV_FIX];
     __shared__ real4 out_dr[FIX_TH];
-    if (index >= sz)return;
+    
     if (th_id == 0) {
         memset(out_dr, 0x00, sizeof(out_dr));
         rci_sh[b_id] = FIX_filtered[index];
@@ -506,15 +513,17 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
 }
 #define MUSUME_TH (64)
 #define THREAD_DIV_MU (32)
-__global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* MUSUME_filtered, size_t nm_start, size_t sz, CellPos*out) {
+__global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn,
+    const CellIndex* MUSUME_filtered, size_t nm_start,const int* sz, CellPos*out) {
     const int index = threadIdx.x / THREAD_DIV_MU + blockIdx.x*blockDim.x / THREAD_DIV_MU;
+    if (index >= *sz)return;
     const int th_id = threadIdx.x%THREAD_DIV_MU;
     const int b_id = threadIdx.x / THREAD_DIV_MU;
     __shared__ real4 mypos_sh[MUSUME_TH / THREAD_DIV_MU];
     __shared__ int rci_sh[MUSUME_TH / THREAD_DIV_MU];
     __shared__ size_t connsz_sh[MUSUME_TH / THREAD_DIV_MU];
     __shared__ real4 out_dr[MUSUME_TH];
-    if (index >= sz)return;
+    
     if (th_id == 0) {
         memset(out_dr, 0x00, sizeof(out_dr));
         rci_sh[b_id] = MUSUME_filtered[index];
@@ -588,9 +597,10 @@ __global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const Cell
 }
 
 
-__global__ void pair_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat, const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* pair_filtered, size_t nm_start, size_t sz, CellPos*out) {
+__global__ void pair_interaction(const cudaTextureObject_t pos_tex, const CellAttr* nmcat,
+    const CELL_STATE* nmcst, const NonMembConn* all_nm_conn, const CellIndex* pair_filtered, size_t nm_start, const int* sz, CellPos*out) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
-    if (index >= sz)return;
+    if (index >= *sz)return;
     const int raw_cell_index = pair_filtered[index];
     real4 dr = { real(0.0), real(0.0), real(0.0), real(0.0) };
     const CellAttr& cat = nmcat[raw_cell_index - nm_start];
@@ -600,50 +610,57 @@ __global__ void pair_interaction(const cudaTextureObject_t pos_tex, const CellAt
     vadda(&out[raw_cell_index], cvmul(DT_Cell, dr));
 }
 void calc_cell_movement(CellManager&cman) {
+    static CellIndexFilter<5> cfl;
     size_t msz = cman.memb_size();
-    size_t asz = cman.all_size();
-    int flt_num;
-    const CellIndex* flt = cman.nm_filter.filter_by_state<DER>(&flt_num);
-    cudaDeviceSynchronize();
+    size_t nmsz = cman.non_memb_size();
+    size_t asz = msz + nmsz;
+    //cfl
+    cfl.resize(nmsz);
+    cfl.initialize_filtering();
+    //const CellIndex* flt = cman.nm_filter.filter_by_state<DER>(&flt_num);
+    cfl.filter_by_state<DER>(0,cman.get_device_non_memb_state(),  msz);
+    cfl.filter_by_state<ALIVE, AIR, DEAD>(1,cman.get_device_non_memb_state(), msz);
+    cfl.filter_by_state<FIX>(2,cman.get_device_non_memb_state(), msz);
+    cfl.filter_by_state<MUSUME>(3,cman.get_device_non_memb_state(), msz);
+    cfl.filter_by_pair(4, cman.get_device_nmattr(), msz);
+    cfl.finish_filtering();
+    //cudaDeviceSynchronize();
     calc_memb_bend << <(unsigned int)msz / 32 + 1, 32 >> > (cman.get_pos_tex(), cman.get_device_mconn(), msz, cman.get_device_pos_all_out());
     //cudaDeviceSynchronize();
-    cudaEventQuery(0);
+
 
     MEMB_interaction << <(unsigned int)msz / 64 + 1, 64>> > (cman.get_pos_tex(), cman.get_device_non_memb_state(), cman.get_device_mconn(), cman.get_device_all_nm_conn(), msz, cman.get_device_pos_all_out());
-    cudaEventQuery(0);
-    DER_interaction << <THREAD_DIV_DER*flt_num / DER_TH + 1, DER_TH >> > (cman.get_pos_tex(), cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-    cudaEventQuery(0);
-    cudaDeviceSynchronize();
 
-    flt = cman.nm_filter.filter_by_state<ALIVE, AIR, DEAD>(&flt_num);
-    cudaDeviceSynchronize();
-    AL_AIR_DE_interaction << <flt_num / 64 + 1, 64 >> > (cman.get_pos_tex(),
+    DER_interaction << <THREAD_DIV_DER*nmsz / DER_TH + 1, DER_TH >> > (cman.get_pos_tex(),
+        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), cfl.get_ptr(0), msz, cfl.get_last_num_ptr(0), cman.get_device_pos_all_out());
+    AL_AIR_DE_interaction << <nmsz / 64 + 1, 64 >> > (cman.get_pos_tex(),
         cman.get_device_nmattr(),
-        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-    cudaEventQuery(0);
+        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), cfl.get_ptr(1), msz, cfl.get_last_num_ptr(1), cman.get_device_pos_all_out());
+    
     //cudaDeviceSynchronize();
 
-    flt = cman.nm_filter.filter_by_state<FIX>(&flt_num);
-    cudaDeviceSynchronize();
-    FIX_interaction << <THREAD_DIV_FIX*flt_num / FIX_TH + 1, FIX_TH >> > (cman.get_pos_tex(),
-        cman.get_device_nmattr(),
-        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-    cudaDeviceSynchronize();
-    cudaEventQuery(0);
-    flt = cman.nm_filter.filter_by_state<MUSUME>(&flt_num);
-    cudaDeviceSynchronize();
-    MUSUME_interaction << <THREAD_DIV_MU* flt_num / MUSUME_TH + 1, MUSUME_TH >> > (cman.get_pos_tex(),
-        cman.get_device_nmattr(),
-        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
+    //flt = cman.nm_filter.filter_by_state<FIX>(&flt_num);
+    //flt = filter_by_state<FIX>(cman.get_device_non_memb_state(), &flt_num, cman.nm_filter.get_flt_head(), msz, asz - msz);
     //cudaDeviceSynchronize();
-    cudaEventQuery(0);
-    flt = cman.nm_filter.filter_by_pair(&flt_num);
-    cudaDeviceSynchronize();
-    pair_interaction << <flt_num / 128 + 1, 128 >> > (cman.get_pos_tex(),
+    FIX_interaction << <THREAD_DIV_FIX*nmsz / FIX_TH + 1, FIX_TH >> > (cman.get_pos_tex(),
         cman.get_device_nmattr(),
-        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-    cudaDeviceSynchronize();
-    cudaEventQuery(0);
+        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), cfl.get_ptr(2), msz, cfl.get_last_num_ptr(2), cman.get_device_pos_all_out());
+    //cudaDeviceSynchronize();
+    
+    //flt = cman.nm_filter.filter_by_state<MUSUME>(&flt_num);
+    //flt = filter_by_state<MUSUME>(cman.get_device_non_memb_state(), &flt_num, cman.nm_filter.get_flt_head(), msz, asz - msz);
+    //cudaDeviceSynchronize();
+    MUSUME_interaction << <THREAD_DIV_MU* nmsz / MUSUME_TH + 1, MUSUME_TH >> > (cman.get_pos_tex(),
+        cman.get_device_nmattr(),
+        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), cfl.get_ptr(3), msz, cfl.get_last_num_ptr(3), cman.get_device_pos_all_out());
+    //cudaDeviceSynchronize();
+
+    //cudaDeviceSynchronize();
+    pair_interaction << <nmsz / 128 + 1, 128 >> > (cman.get_pos_tex(),
+        cman.get_device_nmattr(),
+        cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), cfl.get_ptr(4), msz, cfl.get_last_num_ptr(4), cman.get_device_pos_all_out());
+    //cudaDeviceSynchronize();
+    
     cman.pos_swap_device();
     cman.refresh_pos_tex();
 

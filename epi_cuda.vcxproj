@@ -103,6 +103,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <AdditionalOptions>/wd4819 %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>
       </DisableSpecificWarnings>
+      <DisableLanguageExtensions>true</DisableLanguageExtensions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -150,6 +151,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <AdditionalOptions>/wd4819 %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>
       </DisableSpecificWarnings>
+      <DisableLanguageExtensions>true</DisableLanguageExtensions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -177,7 +179,12 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <FileType>CppCode</FileType>
     </CudaCompile>
     <ClCompile Include="src\helper.cpp" />
-    <CudaCompile Include="src\cell_movement.cu" />
+    <CudaCompile Include="src\cell_movement.cu">
+      <FileType>CppCode</FileType>
+    </CudaCompile>
+    <CudaCompile Include="src\filter.cu">
+      <FileType>CppCode</FileType>
+    </CudaCompile>
     <CudaCompile Include="src\main.cu">
       <FileType>CppCode</FileType>
     </CudaCompile>
@@ -204,6 +211,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="src\cuda_helper_misc.h" />
     <ClInclude Include="src\cuda_test.h" />
     <ClInclude Include="src\define.h" />
+    <ClInclude Include="src\filter.h" />
     <ClInclude Include="src\helper.h" />
     <ClInclude Include="src\LFStack.h" />
     <ClInclude Include="src\map.h" />

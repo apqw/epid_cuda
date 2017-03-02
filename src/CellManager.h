@@ -144,13 +144,16 @@ public:
     
     struct NonMembIndexFilter {
     private:
-    thrust::device_vector<int> filtered_result;
+    
 
 
 
- 
+        thrust::device_vector<int> filtered_result;
     CellManager* parent;
     public:
+        int* get_flt_head() {
+            return thrust::raw_pointer_cast(&filtered_result[0]);
+        }
         struct teststs {
             __host__ __device__ bool operator()(const int i)const {
                 return true;

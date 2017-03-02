@@ -201,7 +201,7 @@ __global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, con
             }
             __syncthreads();
 
-            	for(int r=(find_dermis_THREAD_NUM>>1);r>=1;r>>=1){
+            	for(int r=(FD_MULTI >>1);r>=1;r>>=1){
             		__syncthreads();
             		if(th_id<r){
             			real& me_sq=min_sq[th_id+b_id*FD_MULTI];

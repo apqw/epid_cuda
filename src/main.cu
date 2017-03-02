@@ -8,6 +8,7 @@
 #include "cell_movement.h"
 #include "CubicDynArr.h"
 #include "map.h"
+#include "filter.h"
 #include <cmdline/cmdline.h>
 #include <iostream>
 #include <fstream>
@@ -41,14 +42,14 @@ int main(int argc,char**argv) {
     connect_cell(cm);
     cudaDeviceSynchronize();
     CUDA_SAFE_CALL(cudaGetLastError());
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 10000; i++) {
         calc_cell_movement(cm);
         //CUDA_SAFE_CALL(cudaGetLastError());
         if (i % 1000 == 0) {
             printf("fetching\n");
             cm.fetch();
             printf("done\n");
-            cm.output_old(std::to_string(i));
+            cm.output(std::to_string(i));
             printf("out %d", i);
         }
         //cudaDeviceSynchronize();
