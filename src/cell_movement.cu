@@ -604,41 +604,46 @@ void calc_cell_movement(CellManager&cman) {
     size_t asz = cman.all_size();
     int flt_num;
     const CellIndex* flt = cman.nm_filter.filter_by_state<DER>(&flt_num);
-    calc_memb_bend << <(unsigned int)msz / 32 + 1, 32 >> > (cman.get_pos_tex(), cman.get_device_mconn(), msz, cman.get_device_pos_all_out());
     cudaDeviceSynchronize();
+    calc_memb_bend << <(unsigned int)msz / 32 + 1, 32 >> > (cman.get_pos_tex(), cman.get_device_mconn(), msz, cman.get_device_pos_all_out());
+    //cudaDeviceSynchronize();
+    cudaEventQuery(0);
 
-    MEMB_interaction << <(unsigned int)msz / 64 + 1, 64 >> > (cman.get_pos_tex(), cman.get_device_non_memb_state(), cman.get_device_mconn(), cman.get_device_all_nm_conn(), msz, cman.get_device_pos_all_out());
+    MEMB_interaction << <(unsigned int)msz / 64 + 1, 64>> > (cman.get_pos_tex(), cman.get_device_non_memb_state(), cman.get_device_mconn(), cman.get_device_all_nm_conn(), msz, cman.get_device_pos_all_out());
+    cudaEventQuery(0);
     DER_interaction << <THREAD_DIV_DER*flt_num / DER_TH + 1, DER_TH >> > (cman.get_pos_tex(), cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-
+    cudaEventQuery(0);
     cudaDeviceSynchronize();
 
     flt = cman.nm_filter.filter_by_state<ALIVE, AIR, DEAD>(&flt_num);
-
+    cudaDeviceSynchronize();
     AL_AIR_DE_interaction << <flt_num / 64 + 1, 64 >> > (cman.get_pos_tex(),
         cman.get_device_nmattr(),
         cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-
-    cudaDeviceSynchronize();
+    cudaEventQuery(0);
+    //cudaDeviceSynchronize();
 
     flt = cman.nm_filter.filter_by_state<FIX>(&flt_num);
+    cudaDeviceSynchronize();
     FIX_interaction << <THREAD_DIV_FIX*flt_num / FIX_TH + 1, FIX_TH >> > (cman.get_pos_tex(),
         cman.get_device_nmattr(),
         cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
     cudaDeviceSynchronize();
-
+    cudaEventQuery(0);
     flt = cman.nm_filter.filter_by_state<MUSUME>(&flt_num);
-
+    cudaDeviceSynchronize();
     MUSUME_interaction << <THREAD_DIV_MU* flt_num / MUSUME_TH + 1, MUSUME_TH >> > (cman.get_pos_tex(),
         cman.get_device_nmattr(),
         cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
-    cudaDeviceSynchronize();
-
+    //cudaDeviceSynchronize();
+    cudaEventQuery(0);
     flt = cman.nm_filter.filter_by_pair(&flt_num);
+    cudaDeviceSynchronize();
     pair_interaction << <flt_num / 128 + 1, 128 >> > (cman.get_pos_tex(),
         cman.get_device_nmattr(),
         cman.get_device_non_memb_state(), cman.get_device_all_nm_conn(), flt, msz, flt_num, cman.get_device_pos_all_out());
     cudaDeviceSynchronize();
-
+    cudaEventQuery(0);
     cman.pos_swap_device();
     cman.refresh_pos_tex();
 

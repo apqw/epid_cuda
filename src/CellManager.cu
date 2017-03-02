@@ -33,11 +33,11 @@ bool operator== (const CellDataSet &c1, const CellDataSet &cds) {
             return (v1.x == v2.x) && (v1.y == v2.y) && (v1.z == v2.z);
         }
     };
-    bool eq_pos = std::equal(c1.cpos.hv.begin(), c1.cpos.hv.end(), cds.cpos.hv.begin(), cds.cpos.hv.end(), r4cmp());
+    bool eq_pos = std::equal(c1.cpos.hv.begin(), c1.cpos.hv.end(), cds.cpos.hv.begin(), r4cmp());
 
-    bool eq_state = std::equal(c1.cstate.hv.begin(), c1.cstate.hv.end(), cds.cstate.hv.begin(), cds.cstate.hv.end());
+    bool eq_state = std::equal(c1.cstate.hv.begin(), c1.cstate.hv.end(), cds.cstate.hv.begin());
 
-    bool eq_attr = std::equal(c1.cattr.hv.begin(), c1.cattr.hv.end(), cds.cattr.hv.begin(), cds.cattr.hv.end());
+    bool eq_attr = std::equal(c1.cattr.hv.begin(), c1.cattr.hv.end(), cds.cattr.hv.begin());
 
 #ifdef CM_EQUALITY_DBG 
     std::cout << "CellManager Equality Dbg:CellDataSet" << std::endl;
@@ -54,7 +54,7 @@ bool operator== (const CellDataSet &c1, const CellDataSet &cds) {
 }
 bool operator== (const MembConn &c1, const MembConn &c2) {
     return std::equal(&c1.conn[0], &c1.conn[0] + MEMB_CONN_NUM
-        , &c2.conn[0], &c2.conn[0] + MEMB_CONN_NUM);
+        , &c2.conn[0]);
 
 }
 
@@ -381,8 +381,8 @@ bool operator== (const CellManager &c1, const CellManager &oc)
 {
     bool eq_md = c1.memb_data == oc.memb_data;
     bool eq_nmd = c1.non_memb_data == oc.non_memb_data;
-    bool eq_mconn = std::equal(c1.mconn.hv.begin(), c1.mconn.hv.end(), oc.mconn.hv.begin(), oc.mconn.hv.end());
-    bool eq_nmconn = std::equal(c1.all_nm_conn.hv.begin(), c1.all_nm_conn.hv.end(), oc.all_nm_conn.hv.begin(), oc.all_nm_conn.hv.end());
+    bool eq_mconn = std::equal(c1.mconn.hv.begin(), c1.mconn.hv.end(), oc.mconn.hv.begin());
+    bool eq_nmconn = std::equal(c1.all_nm_conn.hv.begin(), c1.all_nm_conn.hv.end(), oc.all_nm_conn.hv.begin());
 #ifdef CM_EQUALITY_DBG
     std::cout << "CellManager Equality Dbg:" << std::endl;
     std::cout << "eq_md:" << eq_md << std::endl;

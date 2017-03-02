@@ -276,3 +276,7 @@ __pycache__/
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
+/[0-9]*
+/lib/*.a
+*.optf
+

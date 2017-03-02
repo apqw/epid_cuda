@@ -41,9 +41,9 @@ int main(int argc,char**argv) {
     connect_cell(cm);
     cudaDeviceSynchronize();
     CUDA_SAFE_CALL(cudaGetLastError());
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 10; i++) {
         calc_cell_movement(cm);
-        CUDA_SAFE_CALL(cudaGetLastError());
+        //CUDA_SAFE_CALL(cudaGetLastError());
         if (i % 1000 == 0) {
             printf("fetching\n");
             cm.fetch();
@@ -51,6 +51,7 @@ int main(int argc,char**argv) {
             cm.output_old(std::to_string(i));
             printf("out %d", i);
         }
+        //cudaDeviceSynchronize();
     }
     
 

@@ -9,22 +9,22 @@
 #include <cfloat>
 #include <thrust/count.h>
 
-/** ƒOƒŠƒbƒhƒTƒCƒY*/
+/** ï¿½Oï¿½ï¿½ï¿½bï¿½hï¿½Tï¿½Cï¿½Y*/
 static constexpr real AREA_GRID_ORIGINAL = 2.0;//ok
 
-                                                 /** ƒOƒŠƒbƒhƒTƒCƒY (?)*/
+                                                 /** ï¿½Oï¿½ï¿½ï¿½bï¿½hï¿½Tï¿½Cï¿½Y (?)*/
 static constexpr real AREA_GRID = AREA_GRID_ORIGINAL + real(1e-7);//ok
 static constexpr real AREA_GRID_INV = real(1.0)/AREA_GRID;//ok
 
-                                                              /** X•ûŒü‚ÌƒOƒŠƒbƒh”*/
+                                                              /** Xï¿½ï¿½ï¿½ÌƒOï¿½ï¿½ï¿½bï¿½hï¿½ï¿½*/
 static constexpr int	ANX = (int)((real)LX / AREA_GRID_ORIGINAL + 0.5);//ok
-                                                                                  /** Y•ûŒü‚ÌƒOƒŠƒbƒh”*/
+                                                                                  /** Yï¿½ï¿½ï¿½ÌƒOï¿½ï¿½ï¿½bï¿½hï¿½ï¿½*/
 static constexpr int	ANY = (int)((real)LY / AREA_GRID_ORIGINAL + 0.5);//ok
-                                                                                  /** Z•ûŒü‚ÌƒOƒŠƒbƒh”*/
+                                                                                  /** Zï¿½ï¿½ï¿½ÌƒOï¿½ï¿½ï¿½bï¿½hï¿½ï¿½*/
 static constexpr int	ANZ = (int)((real)LZ / AREA_GRID_ORIGINAL);//ok
-                                                                            /** ƒOƒŠƒbƒh1‚Â“–‚½‚è‚Ì×–EŠi”[”ãŒÀ */
+                                                                            /** ï¿½Oï¿½ï¿½ï¿½bï¿½h1ï¿½Â“ï¿½ï¿½ï¿½ï¿½ï¿½Ì×–Eï¿½iï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ */
 static constexpr int	N3 = 200; //max grid cell num //ok
-                                  /** 1×–E‚ÌÚ‘±Å‘å” */
+                                  /** 1ï¿½×–Eï¿½ÌÚ‘ï¿½ï¿½Å‘å” */
 //static constexpr int	N2 = 400; //max conn num //ok
 
 __global__ void grid_init(cudaTextureObject_t pos_tex,CubicDynArrAccessor<LFStack<int, N3>> darr,size_t sz) {
@@ -151,29 +151,72 @@ __global__ void connect_proc2(cudaTextureObject_t pos_tex, NonMembConn* all_nm_c
     }
 }
 */
+#define find_dermis_THREAD_NUM (64)
+#define FD_MULTI (32)
 __global__ void find_dermis(cudaTextureObject_t pos_tex, CellAttr* nm_cattr, const NonMembConn* all_nm_conn,const CellIndex* fix_musume_filtered,size_t nm_start,size_t sz) {
-    const int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index < sz) {
+
+    const int index = threadIdx.x / FD_MULTI + blockIdx.x*blockDim.x / FD_MULTI;
+    const int th_id = threadIdx.x%FD_MULTI;
+    const int b_id = threadIdx.x / FD_MULTI;
+    __shared__ real4 mypos_sh[find_dermis_THREAD_NUM/ FD_MULTI];
+    __shared__ int rci_sh[find_dermis_THREAD_NUM/ FD_MULTI];
+    __shared__ size_t connsz_sh[find_dermis_THREAD_NUM/ FD_MULTI];
+    __shared__ int min_idx[find_dermis_THREAD_NUM];
+    __shared__ real min_sq[find_dermis_THREAD_NUM];
+    //__shared__ real4 out_dr[MUSUME_TH];
+	//const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= sz)return;
+    if(th_id==0){
+    	rci_sh[b_id]=fix_musume_filtered[index];
+    	connsz_sh[b_id] = all_nm_conn[rci_sh[b_id]].conn.size();
+    	mypos_sh[b_id] = tex1Dfetch_real4(pos_tex, rci_sh[b_id]);
+    	for(int i=0;i<find_dermis_THREAD_NUM;i++){
+    		min_sq[i]=REAL_MAX;
+    		min_idx[i]=-1;
+    	}
+    }
+    __syncthreads();
+    const int raw_idx = rci_sh[b_id];
+        const NonMembConn& nmc = all_nm_conn[raw_idx];
+        const size_t nmc_sz = connsz_sh[b_id];
+        if(nmc_sz<=th_id)return;
+        const CellPos mypos = mypos_sh[b_id];
         //const int raw_index = index - nmemb_start;
-        const int raw_idx = fix_musume_filtered[index];
-            real d1sq = REAL_MAX;
+        //const int raw_idx = fix_musume_filtered[index];
+            //real d1sq = REAL_MAX;
             //real distsq = real{ 0.0 };
-            int dermis_idx = -1;
-            const NonMembConn& nmc = all_nm_conn[raw_idx];
-            const int nmc_sz = nmc.conn.size();
-            for (int i = 0; i < nmc_sz; i++) {
+            //int dermis_idx = -1;
+            //const NonMembConn& nmc = all_nm_conn[raw_idx];
+            //const int nmc_sz = nmc.conn.size();
+            for (int i = th_id; i < nmc_sz; i+=FD_MULTI) {
                 const int raw_conn_idx = nmc.conn[i];
                 if (raw_conn_idx  < nm_start) {//memb
-                    const real distsq = p_dist_sq(tex1Dfetch_real4(pos_tex, raw_conn_idx), tex1Dfetch_real4(pos_tex, raw_idx));
-                    if (distsq < d1sq) {
-                        d1sq = distsq;
-                        dermis_idx = raw_conn_idx;
+                    const real distsq = p_dist_sq(tex1Dfetch_real4(pos_tex, raw_conn_idx), mypos);
+                    if (distsq < min_sq[threadIdx.x]) {
+                    	min_sq[threadIdx.x] = distsq;
+                    	min_idx[threadIdx.x]= raw_conn_idx;
                     }
                 }
 
             }
-            nm_cattr[raw_idx-nm_start].dermis = dermis_idx;
-    }
+            __syncthreads();
+
+            	for(int r=(find_dermis_THREAD_NUM>>1);r>=1;r>>=1){
+            		__syncthreads();
+            		if(th_id<r){
+            			real& me_sq=min_sq[th_id+b_id*FD_MULTI];
+            			const real& op_sq=min_sq[th_id+r+b_id*FD_MULTI];
+            			if(me_sq>op_sq){
+            				me_sq=op_sq;
+            				min_idx[th_id+b_id*FD_MULTI]=min_idx[th_id+r+b_id*FD_MULTI];
+            			}
+            		}
+            	}
+
+            if(th_id==0){
+            nm_cattr[raw_idx-nm_start].dermis = min_idx[0+b_id*FD_MULTI];
+            }
+
 }
 
 
@@ -197,7 +240,7 @@ void connect_cell(CellManager & cman)
 
     int flt_num = 0;
     const CellIndex* ci=cman.nm_filter.filter_by_state<FIX, MUSUME>(&flt_num);
-    find_dermis << <flt_num / 64 + 1, 64 >> > (cman.get_pos_tex(), cman.get_device_nmattr(), cman.get_device_all_nm_conn(), ci, nm_start, flt_num);
+    find_dermis << <FD_MULTI*flt_num / find_dermis_THREAD_NUM + 1, find_dermis_THREAD_NUM >> > (cman.get_pos_tex(), cman.get_device_nmattr(), cman.get_device_all_nm_conn(), ci, nm_start, flt_num);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
 }
