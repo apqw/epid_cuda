@@ -36,6 +36,10 @@ public:
 	__host__ __device__ const T& operator[](int idx)const{
 		return data[idx];
 	}
+    __host__ __device__ void copy_fast(const LFStack<T,N>* ptr) {
+        head = ptr->head;
+        memcpy(&data[0], &ptr->data[0], sizeof(T)*ptr->head);
+    }
 
     template<typename T1, unsigned N1>
     friend bool operator== (const LFStack<T1,N1> &c1, const LFStack<T1, N1> &c2);

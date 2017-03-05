@@ -22,18 +22,40 @@ struct dhv_pair {
         hv = dv;
     }
     T* get_raw_device_ptr() {
-        return thrust::raw_pointer_cast(&dv[0]);
+        return thrust::raw_pointer_cast(dv.data());
     }
 
     const T* get_raw_device_ptr()const {
-        return thrust::raw_pointer_cast(&dv[0]);
+        return thrust::raw_pointer_cast(dv.data());
     }
 
     void memset_zero_both() {
         std::memset(&hv[0], 0x00, sizeof(T)*hv.size());
         CUDA_SAFE_CALL(cudaMemset(get_raw_device_ptr(), 0x00, sizeof(T)*dv.size()));
-        CUDA_SAFE_CALL(cudaDeviceSynchronize());
+       // CUDA_SAFE_CALL(cudaDeviceSynchronize());
     }
+    void make_margin(size_t base_size) {
+        constexpr double coef = 1.5;
+        //assert(dv.size() == hv.size());
+        //const size_t sz = hv.size();
+        dv.resize(size_t(base_size*coef+1));
+        hv.resize(size_t(base_size*coef+1));
+    }
+    void make_margin() {
+       // constexpr double coef = 1.5;
+        //assert(dv.size() == hv.size());
+        const size_t sz = hv.size();
+        make_margin(sz);
+    }
+
+    size_t actual_vector_size()const {
+        assert(dv.size() == hv.size());
+        return hv.size();
+    }
+
+   
+
+
 };
 
 #define MEMB_CONN_NUM (6)
@@ -76,6 +98,7 @@ public:
     CellAttr();
 };
 bool operator== (const CellAttr &c1, const CellAttr &c2);
+/*
 struct CellDataSet {
     dhv_pair<CellPos> cpos;
     dhv_pair<CELL_STATE> cstate;
@@ -89,7 +112,8 @@ struct CellDataSet {
 };
 bool operator== (const CellDataSet &c1, const CellDataSet &c2);
 
-
+*/
+/*
 struct CellIterateRange {
     int head;
     int size;
@@ -107,6 +131,8 @@ struct CellIterateRange {
         return index + head;
     }
 };
+*/
+
 enum CellIterateType {
     CI_ALL,
     CI_MEMB,
@@ -117,8 +143,200 @@ enum CellIterateType {
     CI_DEAD,
     CI_ALIVE,
     CI_MUSUME,
-    CI_PAIR
+    CI_PAIR,
+    CI_MUSUME_NOPAIR
 };
+
+enum CSIZE_STR:int {
+    CS_msz = 0,
+    CS_asz = 1,
+    CS_fix_hd =2,
+    CS_der_hd =3,
+    CS_air_hd =4,
+    CS_dead_hd=5,
+    CS_alive_hd=6,
+    CS_musume_hd=7,
+    CS_pair_hd = 8,
+    //CS_pair_end=9,
+    CS_count_alive=10,
+    CS_count_musume=11,
+    CS_count_dead=12,
+    CS_count_alive_act = 13,
+    CS_count_store=14,
+    CS_count_available=15,
+    CS_count_air = 16,
+    //CS_count_dead = 17,
+    CS_count_removed=18,
+    CS_count_removed_air=19,
+    CS_count_removed_dead=20,
+    CS_count_musume_divided=21,
+    CS_count_pair=22,
+    CS_count_musume_nopair=23
+};
+struct CellIterateRange_device {
+    int* nums;
+    CellIterateRange_device(int* _str) :nums(_str) {}
+    __device__ void use_cache(int* cache_ptr) {
+        nums = cache_ptr;
+    }
+    __device__ inline int _idx_simple(int index, int head)const {
+        return index + head;
+    }
+
+    __device__ inline int _idx_full(int index, int head, int mod, int base)const {
+        return (index + head) % mod + base;
+    }
+    template<CellIterateType...CIR>
+    __device__ int idx(int index)const {
+        //static_assert(false, "Undefined CIR.");
+        assert(false);
+        return -8181;
+    }
+
+    template<CellIterateType...CIR>
+    __device__ int size()const {
+        assert(false);
+        return -8181;
+    }
+
+    template<>
+    __device__ int idx<CI_ALL>(int index)const {
+        return _idx_simple(index, 0);
+    }
+
+    template<>
+    __device__ int size<CI_ALL>()const {
+        return nums[CS_asz];
+    }
+
+    template<>
+    __device__ int idx<CI_NON_MEMB>(int index)const {
+        return _idx_simple(index, nums[CS_msz]);
+    }
+
+    template<>
+    __device__ int size<CI_NON_MEMB>()const {
+        return nums[CS_asz] - nums[CS_msz];
+    }
+    template<>
+    __device__ int idx<CI_FIX>(int index)const {
+        return _idx_simple(index, nums[CS_fix_hd]);
+    }
+
+    template<>
+    __device__ int size<CI_FIX>()const {
+        return nums[CS_der_hd] - nums[CS_fix_hd];
+    }
+    template<>
+    __device__ int idx<CI_DER>(int index)const {
+        return _idx_simple(index, nums[CS_der_hd]);
+    }
+
+    template<>
+    __device__ int size<CI_DER>()const {
+        return nums[CS_air_hd] - nums[CS_der_hd];
+    }
+    template<>
+    __device__ int idx<CI_AIR>(int index)const {
+        return _idx_simple(index, nums[CS_air_hd]);
+    }
+
+    template<>
+    __device__ int size<CI_AIR>()const {
+        return nums[CS_dead_hd] - nums[CS_air_hd];
+    }
+    template<>
+    __device__ int idx<CI_DEAD>(int index)const {
+        return _idx_simple(index, nums[CS_dead_hd]);
+    }
+    template<>
+    __device__ int size<CI_DEAD>()const {
+        return nums[CS_alive_hd] - nums[CS_dead_hd];
+    }
+    template<>
+    __device__ int idx<CI_ALIVE>(int index)const {
+        return _idx_simple(index, nums[CS_alive_hd]);
+    }
+    template<>
+    __device__ int size<CI_ALIVE>()const {
+        return nums[CS_musume_hd] - nums[CS_alive_hd];
+    }
+    template<>
+    __device__ int idx<CI_MUSUME>(int index)const {
+        return _idx_simple(index, nums[CS_musume_hd]);
+    }
+    template<>
+    __device__ int size<CI_MUSUME>()const {
+        return nums[CS_asz] - nums[CS_musume_hd];
+    }
+    template<>
+    __device__ int idx<CI_PAIR>(int index)const {
+        return _idx_simple(index, nums[CS_pair_hd]);
+    }
+    template<>
+    __device__ int size<CI_PAIR>()const {
+        return nums[CS_asz] - nums[CS_pair_hd];
+    }
+
+    template<>
+    __device__ int idx<CI_MUSUME_NOPAIR>(int index)const {
+        return _idx_simple(index, nums[CS_musume_hd]);
+    }
+    template<>
+    __device__ int size<CI_MUSUME_NOPAIR>()const {
+        return nums[CS_pair_hd] - nums[CS_musume_hd];
+    }
+    template<>
+    __device__ int idx<CI_AIR, CI_DEAD, CI_ALIVE>(int index)const {
+        return _idx_simple(index, nums[CS_air_hd]);
+    }
+
+    template<>
+    __device__ int size<CI_AIR, CI_DEAD, CI_ALIVE>()const {
+        return nums[CS_musume_hd] - nums[CS_air_hd];
+    }
+
+    template<>
+    __device__ int idx<CI_ALIVE,CI_MUSUME>(int index)const {
+        return _idx_simple(index, nums[CS_alive_hd]);
+    }
+
+    template<>
+    __device__ int size<CI_ALIVE, CI_MUSUME>()const {
+        return nums[CS_asz] - nums[CS_alive_hd];
+    }
+    template<>
+    __device__ int idx<CI_MUSUME, CI_FIX>(int index)const {
+        return _idx_full(index, nums[CS_musume_hd] - nums[CS_fix_hd], nums[CS_asz] - nums[CS_fix_hd], nums[CS_fix_hd]);
+        //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
+    }
+    template<>
+    __device__ int size<CI_MUSUME, CI_FIX>()const {
+        return (nums[CS_asz] - nums[CS_musume_hd]) + (nums[CS_der_hd] - nums[CS_fix_hd]);
+    }
+
+    template<>
+    __device__ int idx<CI_ALIVE, CI_MUSUME, CI_FIX>(int index)const {
+        return _idx_full(index, nums[CS_alive_hd] - nums[CS_fix_hd], nums[CS_asz] - nums[CS_fix_hd], nums[CS_fix_hd]);
+        //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
+    }
+    template<>
+    __device__ int size<CI_ALIVE, CI_MUSUME, CI_FIX>()const {
+        return (nums[CS_asz] - nums[CS_alive_hd]) + (nums[CS_der_hd] - nums[CS_fix_hd]);
+    }
+    template<>
+    __device__ int idx<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>(int index)const {
+        return _idx_full(index, nums[CS_der_hd], nums[CS_alive_hd], 0);
+        //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
+    }
+    template<>
+    __device__ int size<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>()const {
+        return (nums[CS_alive_hd] - nums[CS_der_hd]) + (nums[CS_fix_hd]);
+    }
+
+
+};
+
 
 
 class CellManager
@@ -139,18 +357,31 @@ class CellManager
     dhv_pair<CellAttr> cattr_all;
     dhv_pair<CELL_STATE> cstate_all;
     dhv_pair<NonMembConn> all_nm_conn;
-    size_t _msz;
-    size_t _asz;
-    size_t _fix_hd;
-    size_t _der_hd;
-    size_t _air_hd;
-    size_t _dead_hd;
-    size_t _alive_hd;
-    size_t _musume_hd;
-    size_t _pair_hd;
-    size_t _pair_end;
-public:
 
+    thrust::device_vector<CellPos> cpos_all_tmp_d;
+    thrust::device_vector<CellAttr> cattr_all_tmp_d;
+    thrust::device_vector<CELL_STATE> cstate_all_tmp_d;
+    thrust::device_vector<NonMembConn> all_nm_conn_tmp_d;
+    thrust::device_vector<int> tmp_pending_flg;
+    thrust::device_vector<int> swap_available;
+    thrust::device_vector<int> dev_csize_storage;
+
+    //this order
+    int _msz;
+    int _asz;
+    int _fix_hd;
+    int _der_hd;
+    int _air_hd;
+    int _dead_hd;
+    int _alive_hd;
+    int _musume_hd;
+    int _pair_hd;
+    int _pair_end;
+    //thrust::device_vector<int> cell_count;
+    //thrust::device_vector<int> cell_current_limit;
+public:
+    int* swap_data_ptr();
+    int* swap_idx_store_ptr();
     //Cell order
     //MEMB-FIX-DER-AIR-DEAD-ALIVE-MUSUME
     struct CellAccessor {
@@ -159,7 +390,7 @@ public:
         MembConn* mconn; NonMembConn* nmconn;
         CellAttr* attr;
     };
-
+    void asz_fetch();
     void load(std::string pb_path);
     void load_old(std::string old_data_path);
     void output(std::string out);
@@ -172,10 +403,18 @@ public:
     size_t memb_size()const;
     size_t all_size()const;
     size_t non_memb_size()const;
+    //int enough_size_for_non_memb()const;
+    void _push_cell_heads();
+    int* get_dev_csize_ptr();
+    CellIterateRange_device get_cell_iterate_range_d();
+    /*
     template<CellIterateType...CIR>
     CellIterateRange get_cell_iterate_range() {
         throw std::logic_error("Undefined cell iterate type.");
     }
+    */
+    
+    /*
     template<>
     CellIterateRange get_cell_iterate_range<CI_ALL>() {
         return CellIterateRange{ 0,_asz };
@@ -228,7 +467,7 @@ public:
     CellIterateRange get_cell_iterate_range<CI_DER,CI_AIR,CI_DEAD,CI_MEMB>() {
         return{ _der_hd,_alive_hd-_der_hd+_fix_hd,_alive_hd,0 };
     }
-
+    */
     template<CellIterateType...CIR>
     std::pair<int, int> get_cell_state_range() {
         throw std::logic_error("Undefined cell range type.");

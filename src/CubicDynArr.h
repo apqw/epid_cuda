@@ -36,12 +36,12 @@ class CubicDynArrGenerator {
 public:
     CubicDynArrAccessor<T> acc;
     CubicDynArrGenerator(int x, int y, int z) :X(x), Y(y), Z(z), data(x*y*z) {
-        acc.init(x, y, z, thrust::raw_pointer_cast(&data[0]));
+        acc.init(x, y, z, thrust::raw_pointer_cast(data.data()));
     }
 
     void memset_zero() {
-        cudaMemset(thrust::raw_pointer_cast(&data[0]), 0x00, X*Y*Z);
-        CUDA_SAFE_CALL(cudaDeviceSynchronize());
+        cudaMemset(thrust::raw_pointer_cast(data.data()), 0x00, sizeof(T)*X*Y*Z);
+       // CUDA_SAFE_CALL(cudaDeviceSynchronize());
     }
 
 

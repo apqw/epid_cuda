@@ -27,7 +27,7 @@ CellAttr::CellAttr()
     is_malignant(false),
     is_touch(false),
     nullified(false) {}
-
+/*
 bool operator== (const CellDataSet &c1, const CellDataSet &cds) {
     struct r4cmp {
         bool operator()(real4 v1, real4 v2) {
@@ -53,6 +53,7 @@ bool operator== (const CellDataSet &c1, const CellDataSet &cds) {
 #endif
     return eq_pos&&eq_state&&eq_attr;
 }
+*/
 bool operator== (const MembConn &c1, const MembConn &c2) {
     return std::equal(&c1.conn[0], &c1.conn[0] + MEMB_CONN_NUM
         , &c2.conn[0]);
@@ -81,8 +82,10 @@ bool operator== (const CellAttr &c1, const CellAttr &c2)
         c1.is_touch == c2.is_touch&&
         c1.nullified == c2.nullified;
 }
+/*
 void CellDataSet::verify_host_state() const
 {
+    
     bool size_match =
         (cpos.hv.size() == cstate.hv.size())
         && (cstate.hv.size() == cattr.hv.size())
@@ -93,11 +96,11 @@ void CellDataSet::verify_host_state() const
             + std::to_string(cstate.hv.size()) + " cattr:"
             + std::to_string(cattr.hv.size()));
     }
+    
 
 }
 size_t CellDataSet::size_on_host() const {
-    verify_host_state();
-    return cstate.hv.size();
+    return _asz;
 
 }
 
@@ -107,7 +110,7 @@ void CellDataSet::push_to_device()
     cstate.push_to_device();
     cattr.push_to_device();
 }
-
+*/
 
 
 static bool verify_pb_data(const CellDataPB::CellSet* cs) {
@@ -169,6 +172,19 @@ static void convNativeToCPB(const CellManager::CellAccessor& _cacc, CellDataPB::
     cell->set_spr_nat_len(cacc->attr->spr_nat_len);
     cell->set_nullified(cacc->attr->nullified);
     //div_age_thresh?
+}
+int * CellManager::swap_data_ptr()
+{
+    return thrust::raw_pointer_cast(tmp_pending_flg.data());
+}
+
+int * CellManager::swap_idx_store_ptr()
+{
+    return thrust::raw_pointer_cast(swap_available.data());
+}
+void CellManager::asz_fetch()
+{
+    _asz = dev_csize_storage[CS_asz];
 }
 void CellManager::load(std::string pb_path)
 {
@@ -273,16 +289,40 @@ size_t CellManager::non_memb_size()const {
 size_t CellManager::all_size()const {
     return _asz;
 }
+void CellManager::_push_cell_heads() {
+    dev_csize_storage.resize(64);
+    
+    thrust::fill(dev_csize_storage.begin(), dev_csize_storage.end(), 0);
 
+    dev_csize_storage[CS_msz] = _msz;
+    dev_csize_storage[CS_asz] = _asz;
+    dev_csize_storage[CS_fix_hd] = _fix_hd;
+    dev_csize_storage[CS_der_hd] = _der_hd;
+    dev_csize_storage[CS_air_hd] = _air_hd;
+    dev_csize_storage[CS_dead_hd] = _dead_hd;
+    dev_csize_storage[CS_alive_hd] = _alive_hd;
+    dev_csize_storage[CS_musume_hd] = _musume_hd;
+    dev_csize_storage[CS_pair_hd] = _pair_hd;
+    //dev_csize_storage[CS_pair_end] = _pair_end;
+
+}
+int * CellManager::get_dev_csize_ptr()
+{
+    return thrust::raw_pointer_cast(dev_csize_storage.data());
+}
+CellIterateRange_device CellManager::get_cell_iterate_range_d()
+{
+    return CellIterateRange_device(get_dev_csize_ptr());
+}
 void CellManager::_refresh_cell_pair_count()
 {
     auto mur = get_cell_state_range<CI_MUSUME>();
     int count = 0;
     for (int i = mur.first; i < mur.second; i++) {
-        if (cattr_all.hv[i].pair >= 0)count++;
+        if (cattr_all.hv[i].pair < 0)count++;
     }
-    _pair_hd = _musume_hd;
-    _pair_end = count+_pair_hd;
+    _pair_hd = _musume_hd+count;
+    _pair_end = _asz;
 }
 
 void CellManager::_refresh_cell_count()
@@ -304,7 +344,23 @@ void CellManager::_refresh_cell_count()
     _dead_hd = ccount[(int)AIR] + _air_hd;
     _alive_hd = ccount[(int)DEAD] + _dead_hd;
     _musume_hd = ccount[(int)ALIVE] + _alive_hd;
-    _asz = cstate_all.hv.size();
+    _asz = ccount[(int)MUSUME] + _musume_hd;
+    cpos_all.make_margin(_asz);
+    cattr_all.make_margin(_asz);
+    cstate_all.make_margin(_asz);
+    all_nm_conn.make_margin(_asz);
+    size_t actual_size = cpos_all.actual_vector_size();
+    cpos_all_tmp_d.resize(actual_size);
+    cattr_all_tmp_d.resize(actual_size);
+    cstate_all_tmp_d.resize(actual_size);
+    all_nm_conn_tmp_d.resize(actual_size);
+    tmp_pending_flg.resize(actual_size);
+    swap_available.resize(actual_size);
+    //cell_count[0] = _asz;
+    //cell_current_limit[0] = actual_size;
+    
+
+    
 }
 
 void CellManager::_setup_order_and_count_host()
@@ -328,10 +384,10 @@ void CellManager::_setup_order_and_count_host()
                 return 5;
             case MUSUME:
                 return 6;
-            case DISA:
             case UNUSED:
+            case DISA:
             case BLANK:
-                return 1024;
+                return 1023;
             default:
                 throw std::runtime_error("Undefined cell state found.");
             }
@@ -348,16 +404,27 @@ void CellManager::_setup_order_and_count_host()
     );
     _asz = cpos_all.hv.size();
     std::vector<int> indices(_asz);
+    std::vector<int> subindices(_asz);
     std::iota(indices.begin(), indices.end(), 0);
     std::stable_sort(indices.begin(), indices.end(), st_comp(&cstate_all.hv[0]));
     thrust::host_vector<CellPos> tmp_cpos(_asz);
     thrust::host_vector<CellAttr> tmp_cattr(_asz);
     thrust::host_vector<CELL_STATE> tmp_cst(_asz);
     thrust::host_vector<NonMembConn> tmp_nmconn(_asz);
+    /*
+    int qq = 0;
+    for (int i = 0; i < _asz; i++) {
+        if (cattr_all.hv[i].pair >= 0)printf("%d:%d  %d %d\n", i, cattr_all.hv[i].pair, cattr_all.hv[cattr_all.hv[i].pair].pair == i ? 1 : 0,qq++);
+    }
+    */
+    //printf("\n\n");
+    for (int i = 0; i < _asz; i++) {
+        subindices[indices[i]] = i;
+    }
     for (int i = 0; i < _asz; i++) {
         tmp_cpos[i] = cpos_all.hv[indices[i]];
         tmp_cattr[i] = cattr_all.hv[indices[i]];
-        if (tmp_cattr[i].pair >= 0) tmp_cattr[i].pair = indices[tmp_cattr[i].pair];
+        if (tmp_cattr[i].pair >= 0) tmp_cattr[i].pair = subindices[tmp_cattr[i].pair];
         tmp_cst[i] = cstate_all.hv[indices[i]];
         tmp_nmconn[i] = all_nm_conn.hv[indices[i]];
     }
@@ -368,13 +435,25 @@ void CellManager::_setup_order_and_count_host()
     _refresh_cell_count();
     auto mur = get_cell_state_range<CI_MUSUME>();
     std::iota(indices.begin()+mur.first, indices.begin() + mur.second, mur.first);
+    /*
+    qq = 0;
+    for (int i = 0; i < _asz; i++) {
+        if (cattr_all.hv[i].pair >= 0)printf("%d:%d:%d  %d %d\n", mur.first, i, cattr_all.hv[i].pair, cattr_all.hv[cattr_all.hv[i].pair].pair== i?1:0,qq++);
+    }
+    printf("\n\n");
+    */
     std::stable_partition(indices.begin() + mur.first, indices.begin() + mur.second,
         [&](int i)->bool {
-        return cattr_all.hv[i].pair >= 0;
+        return cattr_all.hv[i].pair < 0;
     });
+
+    for (int i = mur.first; i < mur.second; i++) {
+        subindices[indices[i]] = i;
+    }
     for (int i = mur.first; i < mur.second; i++) {
         tmp_cpos[i] = cpos_all.hv[indices[i]];
         tmp_cattr[i] = cattr_all.hv[indices[i]];
+        if (tmp_cattr[i].pair >= 0) tmp_cattr[i].pair = subindices[tmp_cattr[i].pair];
         tmp_cst[i] = cstate_all.hv[indices[i]];
         tmp_nmconn[i] = all_nm_conn.hv[indices[i]];
     }
@@ -385,7 +464,23 @@ void CellManager::_setup_order_and_count_host()
         cstate_all.hv[i]= tmp_cst[i];
         all_nm_conn.hv[i]=tmp_nmconn[i];
     }
+    for (int i = _fix_hd; i < _der_hd; i++) {
+        if (cattr_all.hv[i].pair >= 0) {
+            cattr_all.hv[i].pair = subindices[cattr_all.hv[i].pair];
+            cattr_all.hv[cattr_all.hv[i].pair].pair = i;
+        }
+    }
+    /*
+    qq = 0;
+    for (int i = 0; i < _asz; i++) {
+        if(cattr_all.hv[i].pair>=0)printf("%d:%d:%d %d %d\n", mur.first, i, cattr_all.hv[i].pair, cattr_all.hv[cattr_all.hv[i].pair].pair == i ? 1 : 0,qq++);
+    }
+    */
+    
     _refresh_cell_pair_count();
+
+
+    _push_cell_heads();
 }
 
 void CellManager::set_up_after_load()
@@ -498,7 +593,7 @@ void CellManager::push_to_device()
     size_t asz = all_size();
 //    nm_filter.resize(asz);
 
-    cpos_all_out.resize(asz);
+    cpos_all_out.resize(cpos_all.actual_vector_size());
     thrust::copy(cpos_all.dv.begin(), cpos_all.dv.end(), cpos_all_out.begin());
     refresh_pos_tex();
 
@@ -510,6 +605,8 @@ void CellManager::fetch()
     //memb_data.cattr.fetch();
     //non_memb_data.cattr.fetch();
     cpos_all.fetch();
+    cattr_all.fetch();
+    _asz = dev_csize_storage[CS_asz];
     //thrust::copy(cpos_all.begin(), cpos_all.begin() + memb_size(), memb_data.cpos.hv.begin());
    // thrust::copy(cpos_all.begin() + memb_size(), cpos_all.end(), non_memb_data.cpos.hv.begin());
     

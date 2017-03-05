@@ -5,22 +5,28 @@
 using CELL_STATE_internal = unsigned short;
 
 #define USE_DOUBLE_AS_REAL
-
+static constexpr double M_PId = double(3.141592653589793238463);
+static constexpr float M_PIf = float(3.14159265358979f);
 #ifdef USE_DOUBLE_AS_REAL
 typedef double4 real4;
 typedef double3 real3;
+typedef double2 real2;
+typedef double1 real1;
 typedef double real;
 #define R4FMT "%lf"
 #define REAL_MAX (DBL_MAX)
 #define sqrtr(v) sqrt((double)(v))
+#define M_PI M_PId
 #else
 typedef float real;
 typedef float4 real4;
 typedef float3 real3;
-
+typedef float2 real2;
+typedef float1 real1;
 #define R4FMT "%f"
 #define REAL_MAX (FLT_MAX)
 #define sqrtr(v) sqrtf(v)
+#define M_PI M_PIf
 #endif
 using CellPos = real4;
 enum CELL_STATE :CELL_STATE_internal {
@@ -65,7 +71,46 @@ static constexpr real K_DESMOSOME = K_TOTAL*K_DESMOSOME_RATIO;
 static constexpr real  THRESH_SP = 3.0;
 static constexpr real Kspring = 25.0;
 static constexpr real Kspring_d = 5.0;
-static constexpr double Kspring_division = 5.0;
+static constexpr real Kspring_division = 5.0;
+
+static constexpr real accel_div = 1.0;
+static constexpr real eps_kb = 0.12;
+static constexpr real alpha_b = 5.0;
+static constexpr real S2 = 0.1;
+static constexpr real ca2p_init = 0.122;
+static constexpr real S0 = 0.1*0.2;
+static constexpr real eps_ks = 0.10*0.5;
+static constexpr real accel_diff = 1.0;
+static constexpr real alpha_k = 2.0;
+static constexpr real eps_kk = 0.10*0.5;
+static constexpr real S1 = 0.1;
+static constexpr real lipid_rel = 0.05*4.0;
+
+static constexpr real ubar = 0.45;
+
+
+static constexpr real delta_lipid = 0.1;
+static constexpr real delta_lipid_inv = 1.0/delta_lipid;
+static constexpr real delta_sig_r1 = 0.1;
+static constexpr real delta_sig_r1_inv = 1.0/delta_sig_r1;
+static constexpr real lipid = 0.6;
+
+static constexpr bool STOCHASTIC = true;
+static constexpr real stoch_div_time_ratio = 0.25;
+static constexpr real delta_L = 0.01*NON_MEMB_RAD;
+static constexpr real THRESH_DEAD = 22.0;
+static constexpr real ADHE_CONST = 31.3;
+static constexpr int DISA_conn_num_thresh = 11; //Nc
+
+                                                /** MUSUME用分裂開始年齢のしきい値*/
+static constexpr real agki_max = 6.0;
+static constexpr real eps_L = 0.14;//ok
+static constexpr real unpair_dist_coef = 0.9;
+/** FIX用分裂開始年齢の倍率 */
+static constexpr real fac = 1;
+
+/** FIX用分裂開始年齢のしきい値 */
+static constexpr real agki_max_fix = fac*agki_max;
 #define DT_Cell real(0.01)
 #define KBEND real(0.5*20.0)
 #define eps_m real(0.01)
@@ -80,3 +125,10 @@ do { \
          exit(err); \
      } \
 } while(0)
+#ifdef NDEBUG
+#define DBG_ONLY(s) do{}while(0)
+#define dbgprintf(x,...) do{}while(0)
+#else
+#define DBG_ONLY(s) do{s;}while(0)
+#define dbgprintf(x,...) printf((x),__VA_ARGS__)
+#endif

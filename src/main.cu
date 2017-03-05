@@ -9,6 +9,7 @@
 #include "CubicDynArr.h"
 #include "map.h"
 #include "filter.h"
+#include "cell_state_renew.h"
 #include <cmdline/cmdline.h>
 #include <iostream>
 #include <fstream>
@@ -33,25 +34,40 @@ int main(int argc,char**argv) {
     cm.set_up_after_load();
     CubicDynArrGenerator<int> cmap1(NX, NY, NZ);
     CubicDynArrGenerator<CMask_t> cmap2(NX, NY, NZ);
+    CubicDynArrGenerator<real> ext_stim(NX, NY, NZ);
+    CubicDynArrGenerator<real> ext_stim_out(NX, NY, NZ);
     //cm_disp_test(cm);
     //cudaDeviceSynchronize();
     std::cout << "Continue." << std::endl;
     connect_cell(cm);
     cudaDeviceSynchronize();
     CUDA_SAFE_CALL(cudaGetLastError());
-    map_gen(cm, cmap1.acc, cmap2.acc);
+    
     CUDA_SAFE_CALL(cudaGetLastError());
+    cm.output_old("precalc");
+    
     for (int i = 0; i < 10000; i++) {
+        
         const size_t msz = cm.memb_size();
         calc_cell_movement(cm);
-        if (i % 1000 == 0) {
+        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
+        cm.refresh_pos_tex();
+        exec_renew(cm);
+        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
+        cm.refresh_pos_tex();
+        //cm.asz_fetch();
+        connect_cell(cm);
+        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
+        map_gen(cm, cmap1.acc, cmap2.acc);
+        if (i % 1000 == 0&&i!=0) {
             printf("fetching\n");
             cm.fetch();
             printf("done\n");
-            cm.output(std::to_string(i));
+            cm.output_old(std::to_string(i));
             printf("out %d", i);
         }
-        //cudaDeviceSynchronize();
+        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
+        DBG_ONLY(printf("count:%d\n", i));
     }
     
 
