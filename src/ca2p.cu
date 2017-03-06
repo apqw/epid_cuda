@@ -9,7 +9,7 @@ __device__ inline real ca2p_by_ext_stim(real _ext_stim) {
 
 __device__ inline real ca2p_into_storage(real ca2p_in_cell) {
     
-    return gamma * ca2p_in_cell / (kg + ca2p_in_cell);
+    return v_gamma * ca2p_in_cell / (kg + ca2p_in_cell);
 }
 
 __device__ inline real ER_domain1_active(real ip3) {

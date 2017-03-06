@@ -201,152 +201,149 @@ struct CellIterateRange_device {
         return -8181;
     }
 
-    template<>
-    __device__ int idx<CI_ALL>(int index)const {
-        return _idx_simple(index, 0);
-    }
-
-    template<>
-    __device__ int size<CI_ALL>()const {
-        return nums[CS_asz];
-    }
-
-    template<>
-    __device__ int idx<CI_NON_MEMB>(int index)const {
-        return _idx_simple(index, nums[CS_msz]);
-    }
-
-    template<>
-    __device__ int size<CI_NON_MEMB>()const {
-        return nums[CS_asz] - nums[CS_msz];
-    }
-    template<>
-    __device__ int idx<CI_FIX>(int index)const {
-        return _idx_simple(index, nums[CS_fix_hd]);
-    }
-
-    template<>
-    __device__ int size<CI_FIX>()const {
-        return nums[CS_der_hd] - nums[CS_fix_hd];
-    }
-    template<>
-    __device__ int idx<CI_DER>(int index)const {
-        return _idx_simple(index, nums[CS_der_hd]);
-    }
-
-    template<>
-    __device__ int size<CI_DER>()const {
-        return nums[CS_air_hd] - nums[CS_der_hd];
-    }
-    template<>
-    __device__ int idx<CI_AIR>(int index)const {
-        return _idx_simple(index, nums[CS_air_hd]);
-    }
-
-    template<>
-    __device__ int size<CI_AIR>()const {
-        return nums[CS_dead_hd] - nums[CS_air_hd];
-    }
-    template<>
-    __device__ int idx<CI_DEAD>(int index)const {
-        return _idx_simple(index, nums[CS_dead_hd]);
-    }
-    template<>
-    __device__ int size<CI_DEAD>()const {
-        return nums[CS_alive_hd] - nums[CS_dead_hd];
-    }
-    template<>
-    __device__ int idx<CI_ALIVE>(int index)const {
-        return _idx_simple(index, nums[CS_alive_hd]);
-    }
-    template<>
-    __device__ int size<CI_ALIVE>()const {
-        return nums[CS_musume_hd] - nums[CS_alive_hd];
-    }
-    template<>
-    __device__ int idx<CI_DEAD,CI_ALIVE>(int index)const {
-        return _idx_simple(index, nums[CS_dead_hd]);
-    }
-    template<>
-    __device__ int size<CI_DEAD, CI_ALIVE>()const {
-        return nums[CS_musume_hd] - nums[CS_dead_hd];
-    }
-    template<>
-    __device__ int idx<CI_MUSUME>(int index)const {
-        return _idx_simple(index, nums[CS_musume_hd]);
-    }
-    template<>
-    __device__ int size<CI_MUSUME>()const {
-        return nums[CS_asz] - nums[CS_musume_hd];
-    }
-    template<>
-    __device__ int idx<CI_PAIR>(int index)const {
-        return _idx_simple(index, nums[CS_pair_hd]);
-    }
-    template<>
-    __device__ int size<CI_PAIR>()const {
-        return nums[CS_asz] - nums[CS_pair_hd];
-    }
-
-    template<>
-    __device__ int idx<CI_MUSUME_NOPAIR>(int index)const {
-        return _idx_simple(index, nums[CS_musume_hd]);
-    }
-    template<>
-    __device__ int size<CI_MUSUME_NOPAIR>()const {
-        return nums[CS_pair_hd] - nums[CS_musume_hd];
-    }
-    template<>
-    __device__ int idx<CI_AIR, CI_DEAD, CI_ALIVE>(int index)const {
-        return _idx_simple(index, nums[CS_air_hd]);
-    }
-
-    template<>
-    __device__ int size<CI_AIR, CI_DEAD, CI_ALIVE>()const {
-        return nums[CS_musume_hd] - nums[CS_air_hd];
-    }
-
-    template<>
-    __device__ int idx<CI_ALIVE,CI_MUSUME>(int index)const {
-        return _idx_simple(index, nums[CS_alive_hd]);
-    }
-
-    template<>
-    __device__ int size<CI_ALIVE, CI_MUSUME>()const {
-        return nums[CS_asz] - nums[CS_alive_hd];
-    }
-    template<>
-    __device__ int idx<CI_MUSUME, CI_FIX>(int index)const {
-        return _idx_full(index, nums[CS_musume_hd] - nums[CS_fix_hd], nums[CS_asz] - nums[CS_fix_hd], nums[CS_fix_hd]);
-        //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
-    }
-    template<>
-    __device__ int size<CI_MUSUME, CI_FIX>()const {
-        return (nums[CS_asz] - nums[CS_musume_hd]) + (nums[CS_der_hd] - nums[CS_fix_hd]);
-    }
-
-    template<>
-    __device__ int idx<CI_ALIVE, CI_MUSUME, CI_FIX>(int index)const {
-        return _idx_full(index, nums[CS_alive_hd] - nums[CS_fix_hd], nums[CS_asz] - nums[CS_fix_hd], nums[CS_fix_hd]);
-        //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
-    }
-    template<>
-    __device__ int size<CI_ALIVE, CI_MUSUME, CI_FIX>()const {
-        return (nums[CS_asz] - nums[CS_alive_hd]) + (nums[CS_der_hd] - nums[CS_fix_hd]);
-    }
-    template<>
-    __device__ int idx<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>(int index)const {
-        return _idx_full(index, nums[CS_der_hd], nums[CS_alive_hd], 0);
-        //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
-    }
-    template<>
-    __device__ int size<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>()const {
-        return (nums[CS_alive_hd] - nums[CS_der_hd]) + (nums[CS_fix_hd]);
-    }
-
-
 };
+template<>
+__device__ inline int CellIterateRange_device::idx<CI_ALL>(int index)const {
+    return _idx_simple(index, 0);
+}
 
+template<>
+__device__ inline int CellIterateRange_device::size<CI_ALL>()const {
+    return nums[CS_asz];
+}
+
+template<>
+__device__ inline int CellIterateRange_device::idx<CI_NON_MEMB>(int index)const {
+    return _idx_simple(index, nums[CS_msz]);
+}
+
+template<>
+__device__ inline int CellIterateRange_device::size<CI_NON_MEMB>()const {
+    return nums[CS_asz] - nums[CS_msz];
+}
+template<>
+__device__  inline int CellIterateRange_device::idx<CI_FIX>(int index)const {
+    return _idx_simple(index, nums[CS_fix_hd]);
+}
+
+template<>
+__device__  inline int CellIterateRange_device::size<CI_FIX>()const {
+    return nums[CS_der_hd] - nums[CS_fix_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_DER>(int index)const {
+    return _idx_simple(index, nums[CS_der_hd]);
+}
+
+template<>
+__device__ inline  int CellIterateRange_device::size<CI_DER>()const {
+    return nums[CS_air_hd] - nums[CS_der_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_AIR>(int index)const {
+    return _idx_simple(index, nums[CS_air_hd]);
+}
+
+template<>
+__device__  inline int CellIterateRange_device::size<CI_AIR>()const {
+    return nums[CS_dead_hd] - nums[CS_air_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_DEAD>(int index)const {
+    return _idx_simple(index, nums[CS_dead_hd]);
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_DEAD>()const {
+    return nums[CS_alive_hd] - nums[CS_dead_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_ALIVE>(int index)const {
+    return _idx_simple(index, nums[CS_alive_hd]);
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_ALIVE>()const {
+    return nums[CS_musume_hd] - nums[CS_alive_hd];
+}
+template<>
+__device__  inline int CellIterateRange_device::idx<CI_DEAD, CI_ALIVE>(int index)const {
+    return _idx_simple(index, nums[CS_dead_hd]);
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_DEAD, CI_ALIVE>()const {
+    return nums[CS_musume_hd] - nums[CS_dead_hd];
+}
+template<>
+__device__  inline int CellIterateRange_device::idx<CI_MUSUME>(int index)const {
+    return _idx_simple(index, nums[CS_musume_hd]);
+}
+template<>
+__device__ inline  int CellIterateRange_device::size<CI_MUSUME>()const {
+    return nums[CS_asz] - nums[CS_musume_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_PAIR>(int index)const {
+    return _idx_simple(index, nums[CS_pair_hd]);
+}
+template<>
+__device__ inline  int CellIterateRange_device::size<CI_PAIR>()const {
+    return nums[CS_asz] - nums[CS_pair_hd];
+}
+
+template<>
+__device__  inline int CellIterateRange_device::idx<CI_MUSUME_NOPAIR>(int index)const {
+    return _idx_simple(index, nums[CS_musume_hd]);
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_MUSUME_NOPAIR>()const {
+    return nums[CS_pair_hd] - nums[CS_musume_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_AIR, CI_DEAD, CI_ALIVE>(int index)const {
+    return _idx_simple(index, nums[CS_air_hd]);
+}
+
+template<>
+__device__  inline int CellIterateRange_device::size<CI_AIR, CI_DEAD, CI_ALIVE>()const {
+    return nums[CS_musume_hd] - nums[CS_air_hd];
+}
+
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_ALIVE, CI_MUSUME>(int index)const {
+    return _idx_simple(index, nums[CS_alive_hd]);
+}
+
+template<>
+__device__  inline int CellIterateRange_device::size<CI_ALIVE, CI_MUSUME>()const {
+    return nums[CS_asz] - nums[CS_alive_hd];
+}
+template<>
+__device__ inline  int CellIterateRange_device::idx<CI_MUSUME, CI_FIX>(int index)const {
+    return _idx_full(index, nums[CS_musume_hd] - nums[CS_fix_hd], nums[CS_asz] - nums[CS_fix_hd], nums[CS_fix_hd]);
+    //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_MUSUME, CI_FIX>()const {
+    return (nums[CS_asz] - nums[CS_musume_hd]) + (nums[CS_der_hd] - nums[CS_fix_hd]);
+}
+
+template<>
+__device__  inline int CellIterateRange_device::idx<CI_ALIVE, CI_MUSUME, CI_FIX>(int index)const {
+    return _idx_full(index, nums[CS_alive_hd] - nums[CS_fix_hd], nums[CS_asz] - nums[CS_fix_hd], nums[CS_fix_hd]);
+    //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_ALIVE, CI_MUSUME, CI_FIX>()const {
+    return (nums[CS_asz] - nums[CS_alive_hd]) + (nums[CS_der_hd] - nums[CS_fix_hd]);
+}
+template<>
+__device__  inline int CellIterateRange_device::idx<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>(int index)const {
+    return _idx_full(index, nums[CS_der_hd], nums[CS_alive_hd], 0);
+    //return _musume_hd - _fix_hd, (_asz - _musume_hd) + (_der_hd - _fix_hd), (_asz - _fix_hd), _fix_hd
+}
+template<>
+__device__  inline int CellIterateRange_device::size<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>()const {
+    return (nums[CS_alive_hd] - nums[CS_der_hd]) + (nums[CS_fix_hd]);
+}
 
 
 class CellManager
