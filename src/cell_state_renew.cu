@@ -276,6 +276,7 @@ __global__ void prepare_state_change_ALIVE(SwapStruct sstr, CellIterateRange_dev
     if (sstr.cat[raw_idx].agek >= THRESH_DEAD) {
         dbgprintf("ALIVE->DEAD %d\n", raw_idx);
         atomicAdd(&cir.nums[CS_count_alive], 1);
+        atomicAdd(&cir.nums[CS_count_sw], 1);
         sstr.swp_data[raw_idx] = -2;
         //sstr.record_pending_swap_by_state(raw_idx, swp_idx, DEAD);
     }

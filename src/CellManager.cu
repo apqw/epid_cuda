@@ -506,6 +506,7 @@ void CellManager::correct_internal_host_state()
 {
 
 }
+
 /*
 CELL_STATE * CellManager::get_device_non_memb_state()
 {
@@ -627,6 +628,7 @@ bool operator== (const CellManager &c1, const CellManager &oc)
 
     return eq_md&&eq_nmd&&eq_mconn&&eq_nmconn;
 }
+
 void CellManager::verify_host_internal_state()const
 {
     
@@ -660,6 +662,15 @@ void CellManager::verify_host_internal_state()const
 void CellManager::clear_all_non_memb_conn_both()
 {
     all_nm_conn.memset_zero_both();
+}
+const real * CellManager::zzmax_ptr()const
+{
+    return thrust::raw_pointer_cast(v_zzmax.data());
+}
+
+real * CellManager::zzmax_ptr()
+{
+    return thrust::raw_pointer_cast(v_zzmax.data());
 }
 /*
 CellManager::CellAccessor CellManager::get_memb_host(int idx)
@@ -876,6 +887,7 @@ CellManager::CellManager()
     _dead_hd = 0;
     _alive_hd = 0;
     _musume_hd = 0;
+    v_zzmax.resize(1);
 }
 
 
@@ -904,4 +916,61 @@ void CellAttr::print()const
     _pca(is_touch);
     _pca(nullified);
 #undef _pca
+}
+
+__inline__ __device__
+real warpReduceMax(real val) {
+    for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2)
+        val = max(val, __shfl_down(val, offset));
+    return val;
+}
+
+__inline__ __device__
+real blockReduceMax(real val) {
+
+    static __shared__ real shared[32]; // Shared mem for 32 partial sums
+    int lane = threadIdx.x % WARP_SIZE;
+    int wid = threadIdx.x / WARP_SIZE;
+
+    val = warpReduceMax(val);     // Each warp performs partial reduction
+
+    if (lane == 0) shared[wid] = val; // Write reduced value to shared memory
+
+    __syncthreads();              // Wait for all partial reductions
+
+                                  //read from shared memory only if that warp existed
+    val = (threadIdx.x < blockDim.x / WARP_SIZE) ? shared[lane] : -REAL_MAX;
+
+    if (wid == 0) val = warpReduceMax(val); //Final reduce within first warp
+
+    return val;
+}
+__global__ void deviceReduceMaxPos(const CellPos *in, real* out, CellIterateRange_device cir) {
+    real val = -REAL_MAX;
+    const int N = cir.nums[CS_asz];
+    //reduce multiple elements per thread
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+        i < N;
+        i += blockDim.x * gridDim.x) {
+        val=max(val, in[i].z);
+    }
+    val = blockReduceMax(val);
+    if (threadIdx.x == 0)
+        out[blockIdx.x] = val;
+}
+
+__global__ void deviceReduceMaxPos_finalize(const real *in, real* out_zzmax) {
+    real val = in[threadIdx.x];
+    val = blockReduceMax(val);
+    if (threadIdx.x == 0)
+        *out_zzmax = val;
+}
+#define REDU_ZMAX_BLC (1024)
+#define REDU_ZMAX_TH (512)
+void CellManager::refresh_zzmax()
+{
+    static thrust::device_vector<real> tmp_max_out(REDU_ZMAX_BLC);
+    
+    deviceReduceMaxPos << <REDU_ZMAX_BLC, REDU_ZMAX_TH >> >(get_device_pos_all(), thrust::raw_pointer_cast(tmp_max_out.data()), get_cell_iterate_range_d());
+    deviceReduceMaxPos_finalize << <1, REDU_ZMAX_BLC >> > (thrust::raw_pointer_cast(tmp_max_out.data()), zzmax_ptr());
 }

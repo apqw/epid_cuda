@@ -28,8 +28,6 @@ __global__ void _filter_by_state(const CELL_STATE* cst, int* fltc, CellIndex* ou
 void _fbp(size_t aa, const CellAttr* cat, int* fltc, CellIndex* out, size_t memb_sz, size_t sz);
 
 
-
-
 void _fastmz(int*ptr);
 template<unsigned N>
 class CellIndexFilter {

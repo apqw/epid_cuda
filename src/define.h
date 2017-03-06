@@ -47,6 +47,7 @@ using CellIndex = int;
 using CMask_t = int;
 #define MEMB_NUM_X (100)
 #define MEMB_NUM_Y (114)
+#define CELL_CONN_NUM (200)
 static constexpr real  LX = real(50.0);
 static constexpr real  LY = real(50.0);
 static constexpr real  LZ = real(100.0);
@@ -106,12 +107,58 @@ static constexpr int DISA_conn_num_thresh = 11; //Nc
 static constexpr real agki_max = 6.0;
 static constexpr real eps_L = 0.14;//ok
 static constexpr real unpair_dist_coef = 0.9;
+
 /** FIX用分裂開始年齢の倍率 */
 static constexpr real fac = 1;
 
 /** FIX用分裂開始年齢のしきい値 */
 static constexpr real agki_max_fix = fac*agki_max;
+
+static constexpr real kb = 0.025;
+static constexpr real DUR_ALIVE = 0.5;
+static constexpr real DUR_DEAD = 2.0;
+static constexpr real kbc = 0.4*1.2;
+static constexpr real Hb = 0.01;
+static constexpr real Cout = 1.0;
+static constexpr real kg = 0.1;
+static constexpr real gamma = 2.0;
+static constexpr real mu0 = 0.567;
+static constexpr real mu1 = 0.1;
+static constexpr real kmu = 0.05;
+static constexpr real para_b = 0.11;
+static constexpr real para_bb = 0.89;
+static constexpr real para_k1 = 0.7;
+static constexpr real k_flux = 8.1;
+
+static constexpr real beta_zero = 0.02;
+static constexpr real CA_OUT = 1.0;
+static constexpr real leak_from_storage = CA_OUT*beta_zero;
+static constexpr real thgra = 0.2;
+static constexpr real delta_th = 1.0;
+static constexpr real thpri = 1.0;
+static constexpr real kpa = 4.0;
+static constexpr real Kgra = kpa;
+static constexpr real delta_K = 1.0;
+static constexpr real Kpri = 6.0;
+static constexpr real delta_I = 1.5;
+static constexpr real iage_kitei = 0;//ok
+static constexpr real para_k2 = 0.7;
+static constexpr real H0 = 0.5;
+static constexpr real wd = 0.1;//ok
+static constexpr real epsw0 = 0.1;
+static constexpr real Ca_avg_time = 10.0;
+static constexpr real DT_Ca = 0.01;
+static constexpr unsigned Ca_ITR = (int)(Ca_avg_time / DT_Ca);
+static constexpr real ca2p_du = 0.01;
+static constexpr real Kpp = 0.3;
+static constexpr real dp = 0.1;
 #define DT_Cell real(0.01)
+
+static constexpr real DB = 0.0009;
+static constexpr real Da = 1.0;
+static constexpr real AIR_STIM = 0.1;
+static constexpr real STIM11 = 0.002;//ok
+static constexpr real Kaa = 0.5;//ok
 #define KBEND real(0.5*20.0)
 #define eps_m real(0.01)
 static constexpr real COMPRESS_FACTOR = 4.0;
@@ -125,6 +172,8 @@ do { \
          exit(err); \
      } \
 } while(0)
+
+#define WARP_SIZE (32)
 #ifdef NDEBUG
 #define DBG_ONLY(s) do{}while(0)
 #define dbgprintf(x,...) do{}while(0)

@@ -65,7 +65,7 @@ struct MembConn {
     friend bool operator== (const MembConn &c1, const MembConn &c2);
 };
 bool operator== (const MembConn &c1, const MembConn &c2);
-#define CELL_CONN_NUM (200)
+
 struct NonMembConn {
     LFStack<CellIndex, CELL_CONN_NUM> conn;
     friend bool operator== (const NonMembConn &c1, const NonMembConn &c2);
@@ -147,31 +147,33 @@ enum CellIterateType {
     CI_MUSUME_NOPAIR
 };
 
-enum CSIZE_STR:int {
+enum CSIZE_STR :int {
     CS_msz = 0,
     CS_asz = 1,
-    CS_fix_hd =2,
-    CS_der_hd =3,
-    CS_air_hd =4,
-    CS_dead_hd=5,
-    CS_alive_hd=6,
-    CS_musume_hd=7,
+    CS_fix_hd = 2,
+    CS_der_hd = 3,
+    CS_air_hd = 4,
+    CS_dead_hd = 5,
+    CS_alive_hd = 6,
+    CS_musume_hd = 7,
     CS_pair_hd = 8,
     //CS_pair_end=9,
-    CS_count_alive=10,
-    CS_count_musume=11,
-    CS_count_dead=12,
+    CS_count_alive = 10,
+    CS_count_musume = 11,
+    CS_count_dead = 12,
     CS_count_alive_act = 13,
-    CS_count_store=14,
-    CS_count_available=15,
+    CS_count_store = 14,
+    CS_count_available = 15,
     CS_count_air = 16,
     //CS_count_dead = 17,
-    CS_count_removed=18,
-    CS_count_removed_air=19,
-    CS_count_removed_dead=20,
-    CS_count_musume_divided=21,
-    CS_count_pair=22,
-    CS_count_musume_nopair=23
+    CS_count_removed = 18,
+    CS_count_removed_air = 19,
+    CS_count_removed_dead = 20,
+    CS_count_musume_divided = 21,
+    CS_count_pair = 22,
+    CS_count_musume_nopair = 23,
+    CS_count_sw=24,
+    CS_count_loop_ca2p=25
 };
 struct CellIterateRange_device {
     int* nums;
@@ -260,6 +262,14 @@ struct CellIterateRange_device {
     template<>
     __device__ int size<CI_ALIVE>()const {
         return nums[CS_musume_hd] - nums[CS_alive_hd];
+    }
+    template<>
+    __device__ int idx<CI_DEAD,CI_ALIVE>(int index)const {
+        return _idx_simple(index, nums[CS_dead_hd]);
+    }
+    template<>
+    __device__ int size<CI_DEAD, CI_ALIVE>()const {
+        return nums[CS_musume_hd] - nums[CS_dead_hd];
     }
     template<>
     __device__ int idx<CI_MUSUME>(int index)const {
@@ -365,7 +375,7 @@ class CellManager
     thrust::device_vector<int> tmp_pending_flg;
     thrust::device_vector<int> swap_available;
     thrust::device_vector<int> dev_csize_storage;
-
+    thrust::device_vector<real> v_zzmax;
     //this order
     int _msz;
     int _asz;
@@ -379,6 +389,7 @@ class CellManager
     int _pair_end;
     //thrust::device_vector<int> cell_count;
     //thrust::device_vector<int> cell_current_limit;
+    
 public:
     int* swap_data_ptr();
     int* swap_idx_store_ptr();
@@ -399,6 +410,8 @@ public:
     void refresh_memb_conn_host();
     void verify_host_internal_state()const;
     void clear_all_non_memb_conn_both();
+    const real* zzmax_ptr()const;
+    real* zzmax_ptr();
     CellAccessor get_cell_acc(int idx);
     size_t memb_size()const;
     size_t all_size()const;
@@ -521,6 +534,7 @@ public:
 
     void correct_internal_host_state();
    
+    void refresh_zzmax();
     NonMembConn* get_device_all_nm_conn();
     MembConn* get_device_mconn();
     CellAttr* get_device_attr();
@@ -609,3 +623,4 @@ public:
     ~CellManager();
 };
 bool operator== (const CellManager &c1, const CellManager &c2);
+void reduce_zmax(const CellPos*cp,real*optr, CellIterateRange_device cir);

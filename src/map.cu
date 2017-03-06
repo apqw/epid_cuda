@@ -2,7 +2,6 @@
 #include "CubicDynArr.h"
 #include "CellManager.h"
 #include "device_launch_parameters.h"
-#include "cuda_helper_misc.h"
 #include "math_helper.h"
 #include "map.h"
 #include "filter.h"
@@ -18,7 +17,7 @@ static constexpr int irz_m = (int)(MEMB_RAD*NZ / LZ);
 #define NMAFM_MULTI (32)
 
 
-__global__ void map_gen_memb_non_afm(const cudaTextureObject_t pos_tex, const CellIterateRange_device cir,CubicDynArrAccessor<int> cmap1, CubicDynArrAccessor<CMask_t> cmap2,int memb_sz) {
+__global__ void map_gen_memb_non_afm(const cudaTextureObject_t pos_tex, const CellIterateRange_device cir, CubicDynArrAccessor<int> cmap1,int memb_sz) {
 
     const int th_id = threadIdx.x%NMAFM_MULTI;
     const int b_id = threadIdx.x / NMAFM_MULTI;
@@ -59,6 +58,8 @@ __global__ void map_gen_memb_non_afm(const cudaTextureObject_t pos_tex, const Ce
         const int rlz = k;
         const real dist_sq = _m_norm_sq(i*dx - mypos.x, j*dy - mypos.y, k*dz - mypos.z);
         if (dist_sq < radsq) {
+            
+            //surf3Dwrite((int)index,cmap1, rlx* sizeof(int), rly, rlz);
             cmap1.at(rlx, rly, rlz) = index;
         }
     }
@@ -102,25 +103,40 @@ __global__ void map_gen_afm(const cudaTextureObject_t pos_tex, const CellIterate
             for (int k = zmin; k <= zmax; k++) {
                 const int rlz = k;
                 const real dist_sq = _m_norm_sq(i*dx - mypos.x, j*dy - mypos.y, k*dz - mypos.z);
+               // const int test = surf3Dread<int>(cmap1, rlx, rly, rlz);
                 if (dist_sq < FAC_MAP*FAC_MAP*NON_MEMB_RAD*NON_MEMB_RAD) {
-                    cmap2.at(rlx, rly, rlz) = 1;
+                   //surf3Dwrite((CMask_t)1,cmap2, rlx*sizeof(CMask_t), rly, rlz);
+                    cmap2.at(rlx, rly, rlz) = -1;
                 }
                 if (dist_sq < NON_MEMB_RAD*NON_MEMB_RAD) {
+                  //surf3Dwrite((int)1,cmap1, rlx * sizeof(int), rly, rlz);
                     cmap1.at(rlx, rly, rlz) = index;
                 }
             }
         
     
 }
+__global__ void cmap1_clear(CubicDynArrAccessor<int> cmap1) {
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cmap1.size())return;
+    cmap1.raw_at(index) = -1;
+}
 
+__global__ void cmap2_clear(CubicDynArrAccessor<CMask_t> cmap2) {
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cmap2.size())return;
+    cmap2.raw_at(index) = 0;
+}
 void map_gen(CellManager&cm, CubicDynArrAccessor<int> cmap1, CubicDynArrAccessor<CMask_t> cmap2) {
-
+    cmap1_clear << <cmap1.size() / 1024 + 1, 1024 >> > (cmap1);
+    cmap2_clear << <cmap2.size() / 1024 + 1, 1024 >> > (cmap2);
     const size_t nmsz = cm.non_memb_size();
     //const CellIterateRange afmcir = cm.get_cell_iterate_range<CI_ALIVE, CI_MUSUME, CI_FIX>();
     CellIterateRange_device cird = cm.get_cell_iterate_range_d();
     map_gen_afm<<<AFM_MULTI*nmsz/AFM_THREAD_NUM+1,AFM_THREAD_NUM>>>(cm.get_pos_tex(), cird, cmap1, cmap2);
-
+    DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
     //const CellIterateRange nafmcir = cm.get_cell_iterate_range<CI_DER, CI_AIR, CI_DEAD, CI_MEMB>();
     const size_t msz = cm.memb_size();
-    map_gen_memb_non_afm << <NMAFM_MULTI*cm.all_size() / NMAFM_THREAD_NUM + 1, NMAFM_THREAD_NUM >> >(cm.get_pos_tex(), cird, cmap1, cmap2,msz);
+    map_gen_memb_non_afm << <NMAFM_MULTI*cm.all_size() / NMAFM_THREAD_NUM + 1, NMAFM_THREAD_NUM >> >(cm.get_pos_tex(), cird, cmap1,msz);
+    DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
 }
