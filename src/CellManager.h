@@ -478,47 +478,13 @@ public:
         return{ _der_hd,_alive_hd-_der_hd+_fix_hd,_alive_hd,0 };
     }
     */
+    
     template<CellIterateType...CIR>
     std::pair<int, int> get_cell_state_range() {
         throw std::logic_error("Undefined cell range type.");
     }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_ALL>() {
-        return std::make_pair(0, (int)_asz);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_NON_MEMB>() {
-        return std::make_pair(_fix_hd, (int)_asz);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_FIX>() {
-        return std::make_pair(_fix_hd, _der_hd);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_DER>() {
-        return std::make_pair(_der_hd, _air_hd);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_AIR>() {
-        return std::make_pair(_air_hd, _dead_hd);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_DEAD>() {
-        return std::make_pair(_dead_hd, _alive_hd);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_ALIVE>() {
-        return std::make_pair(_alive_hd, _musume_hd);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_MUSUME>() {
-        return std::make_pair(_musume_hd, (int)_asz);
-    }
-    template<>
-    std::pair<int, int> get_cell_state_range<CI_PAIR>() {
-        return std::make_pair(_pair_hd,_pair_end);
-    }
 
+    
     void _refresh_cell_pair_count();
     void _refresh_cell_count();
     void _setup_order_and_count_host();
@@ -619,5 +585,42 @@ public:
     CellManager();
     ~CellManager();
 };
+
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_ALL>() {
+    return std::make_pair(0, (int)_asz);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_NON_MEMB>() {
+    return std::make_pair(_fix_hd, (int)_asz);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_FIX>() {
+    return std::make_pair(_fix_hd, _der_hd);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_DER>() {
+    return std::make_pair(_der_hd, _air_hd);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_AIR>() {
+    return std::make_pair(_air_hd, _dead_hd);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_DEAD>() {
+    return std::make_pair(_dead_hd, _alive_hd);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_ALIVE>() {
+    return std::make_pair(_alive_hd, _musume_hd);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_MUSUME>() {
+    return std::make_pair(_musume_hd, (int)_asz);
+}
+template<>
+inline std::pair<int, int> CellManager::get_cell_state_range<CI_PAIR>() {
+    return std::make_pair(_pair_hd, _pair_end);
+}
 bool operator== (const CellManager &c1, const CellManager &c2);
 void reduce_zmax(const CellPos*cp,real*optr, CellIterateRange_device cir);
