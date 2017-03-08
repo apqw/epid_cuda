@@ -8,7 +8,7 @@
 #include "cell_movement.h"
 #include "CubicDynArr.h"
 #include "map.h"
-#include "filter.h"
+//#include "filter.h"
 #include "cell_state_renew.h"
 #include "cuda_helper_misc.h"
 #include "calc_ext_stim.h"
@@ -55,6 +55,9 @@ void print_device_infos(){
 
     }
 }
+__global__ void real_3d_init(cudaSurfaceObject_t cso){
+	surf3Dwrite_real(real(0.0),cso,threadIdx.x,blockIdx.x,blockIdx.y);
+}
 int main(int argc,char**argv) {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
     print_device_infos();
@@ -83,7 +86,8 @@ int main(int argc,char**argv) {
     CubicDynArrGenerator<CMask_t> cmap2(NX, NY, NZ);
     cuda3DSurface<real> ext_stim(NX, NY, NZ);
     cuda3DSurface<real> ext_stim_out(NX, NY, NZ);
-        
+    real_3d_init<<<dim3(NY,NZ),NX>>>(ext_stim.st);
+    real_3d_init<<<dim3(NY,NZ),NX>>>(ext_stim_out.st);
         /*
         CubicDynArrGenerator<real> ext_stim(NX, NY, NZ);
     CubicDynArrGenerator<real> ext_stim_out(NX, NY, NZ);

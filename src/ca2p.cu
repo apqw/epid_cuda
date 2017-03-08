@@ -115,7 +115,9 @@ __global__ void supra_calc(const CellPos*cpos,
     real* exinert,
     const real* IP3_in,real* IP3_out,
     NonMembConn*nmconn, const real* agekset,const cudaSurfaceObject_t ATP_first, const cudaSurfaceObject_t ext_stim_first, CellIterateRange_device cir) {
-    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+
+	//(cpos,ca2p1,ca2p2,ca2p_avg,diffu,gj,exinert,IP3_1,IP3_2,nmc,agek,ATP_1,extstim,cir)
+	const int index = threadIdx.x + blockIdx.x*blockDim.x;
     if (index >= cir.size<CI_ALIVE,CI_MUSUME,CI_FIX>()) return;
     const int raw_idx = cir.idx<CI_ALIVE, CI_MUSUME, CI_FIX>(index);
     const real4 mypos = cpos[raw_idx];
@@ -138,22 +140,25 @@ __global__ void supra_calc(const CellPos*cpos,
     for (int i = 0; i < sz; i++) {
         const int opidx = nmc.conn[i];
         //st==ALIVE||st==DEAD||st==FIX||st==MUSUME
+        //MEMB-FIX-DER-AIR-DEAD-ALIVE-MUSUME
         const bool criteria_all = cir.nums[CS_fix_hd] <= opidx && !(cir.nums[CS_der_hd] <= opidx&&opidx < cir.nums[CS_dead_hd]);
         const bool criteria_alive = cir.nums[CS_alive_hd] <= opidx && opidx<cir.nums[CS_musume_hd];
         if (criteria_all) {
-            tmp_diffu += mygj[opidx] * (ca2p_in[opidx] - myca2p);
-            tmp_IP3 += mygj[opidx] * (ca2p_in[opidx] - myca2p);
+            tmp_diffu += mygj[i] * (ca2p_in[opidx] - myca2p);
+            tmp_IP3 += mygj[i] * (IP3_in[opidx] - IP3_in[raw_idx]);
             if (criteria_alive) {
-                mygj[opidx] +=DT_Ca* fw(fabs(ca2p_in[opidx] - myca2p), mygj[opidx]);
+            	//if(mygj[i]==0.0)printf("PogChanhCBhh %f\n",mygj[i]);
+                mygj[i] +=DT_Ca* fw(fabs(ca2p_in[opidx] - myca2p), mygj[i]);
             }
         }
     }
-
+    const real extf=grid_avg8_sobj(ext_stim_first, ix, iy, iz);
    const real duo= diff_u_out[raw_idx]= ca2p_reaction_factor(myca2p, exinert[raw_idx], IP3_in[raw_idx],
-       grid_avg8_sobj(ext_stim_first, ix, iy, iz)) + ca2p_du*IAGv*tmp_diffu;
+       extf) + ca2p_du*IAGv*tmp_diffu;
+   //if(index==0)printf("duo:%f tmpdiff:%f extf:%f test:%f %d %d %d\n",duo,tmp_diffu,extf,surf3Dread_real(ext_stim_first,ix,iy,iz),ix,iy,iz);
    IP3_out[raw_idx] =
        IP3_in[raw_idx] + DT_Ca*(IP3_default_diff(_Kpa, grid_avg8_sobj(ATP_first, ix, iy, iz), IP3_in[raw_idx]) + dp*IAGv*tmp_IP3);
-  
+   //if(index==0)printf("ip3O:%f\n",IP3_out[raw_idx]);
    const real cs = myca2p + DT_Ca*duo;
    ca2p_out[raw_idx] = cs;
    ca2p_avg_out[raw_idx] += cs;
@@ -170,6 +175,7 @@ __device__ inline real fa(real diffu, real A) {
 #define CDIM (4)
 __global__ void ATP_refresh(const cudaTextureObject_t cmap1,
     const cudaTextureObject_t cmap2,
+    const NonMembConn*nmc,CellIterateRange_device cir,
     const real* diffu_map,
     const cudaSurfaceObject_t ATP_in, cudaSurfaceObject_t ATP_out,
     const real*zzmax) {
@@ -187,20 +193,34 @@ __global__ void ATP_refresh(const cudaTextureObject_t cmap1,
     const int prev_z = z == 0 ? 1 : z - 1; const int next_z = z == NZ - 1 ? NZ - 2 : z + 1;
 #define midx(xx,yy,zz) (xx+NX*(yy+NY*zz))
     const int cidx = tex1Dfetch<int>(cmap1, midx(x, y, z));
+    //MEMB-FIX-DER-AIR-DEAD-ALIVE-MUSUME
+    const bool al_fix_mu = cir.nums[CS_fix_hd]<=cidx&&!(cir.nums[CS_der_hd]<=cidx&&cidx<cir.nums[CS_alive_hd]);
+    const real diffu = al_fix_mu ? diffu_map[cidx]:0.0;
 
-    const real diffu = cidx < 0 ? 0.0 : diffu_map[cidx];
-    const real asf = cidx < 0 ? 0.0 : AIR_STIM;
+    real asf=0.0;
+    if(cidx>=0){
+    	const NonMembConn& mynmc=nmc[cidx];
+    	const size_t mysz=mynmc.conn.size();
+    	for(int i=0;i<mysz;i++){
+    		const int opidx=mynmc.conn[i];
+    		if(cir.nums[CS_air_hd]<=opidx&&opidx<cir.nums[CS_dead_hd]){
+    			asf=AIR_STIM;
+    			break;
+    		}
+    	}
+    }
     const real myv = surf3Dread_real(ATP_in, x, y, z);
     const real outv = myv +
         DT_Ca*(Da*(
-            tex1Dfetch<int>(cmap2, midx(prev_x, y, z))*(surf3Dread_real(ATP_in, prev_x, y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(next_x, y, z))*(surf3Dread_real(ATP_in, next_x, y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, prev_y, z))*(surf3Dread_real(ATP_in, x, prev_y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, next_y, z))*(surf3Dread_real(ATP_in, x, next_y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, y, prev_z))*(surf3Dread_real(ATP_in, x, y, prev_z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, y, next_z))*(surf3Dread_real(ATP_in, x, y, next_z) - myv)
+            intmask_real(tex1Dfetch<int>(cmap2, midx(prev_x, y, z)),(surf3Dread_real(ATP_in, prev_x, y, z) - myv))
+            + intmask_real(tex1Dfetch<int>(cmap2, midx(next_x, y, z)),(surf3Dread_real(ATP_in, next_x, y, z) - myv))
+            + intmask_real(tex1Dfetch<int>(cmap2, midx(x, prev_y, z)),(surf3Dread_real(ATP_in, x, prev_y, z) - myv))
+            + intmask_real(tex1Dfetch<int>(cmap2, midx(x, next_y, z)),(surf3Dread_real(ATP_in, x, next_y, z) - myv))
+            + intmask_real(tex1Dfetch<int>(cmap2, midx(x, y, prev_z)),(surf3Dread_real(ATP_in, x, y, prev_z) - myv))
+            + intmask_real(tex1Dfetch<int>(cmap2, midx(x, y, next_z)),(surf3Dread_real(ATP_in, x, y, next_z) - myv))
             )*inv_dx*inv_dx
             + fa(diffu, myv)+asf);
+    //if(x==NX/2&&y==NY/2&&z==NZ/4)printf("myv:%f\n",myv);
     surf3Dwrite_real(outv, ATP_out, x, y, z);
 }
 __global__ void test22() {
@@ -210,8 +230,8 @@ __global__ void initialize_ca2p_calc(CellIterateRange_device cir,CellAttr*cat,
 		gj_data*gj,real* ca2p1,real* ca2p2,real* ca2p_avg,real* diffu,real*exinert,real*IP3_1,real*IP3_2,real*agek) {
 const int index=threadIdx.x+blockIdx.x*blockDim.x;
 if(index>=cir.nums[CS_asz])return;
-ca2p1[index]=ca2p_init;
-ca2p2[index]=ca2p_init;
+ca2p1[index]=cat[index].ca2p_avg;
+ca2p2[index]=cat[index].ca2p_avg;
 ca2p_avg[index]=real(0.0);
 diffu[index]=real(0.0);
 exinert[index]=cat[index].ex_inert;
@@ -219,7 +239,7 @@ IP3_1[index]=cat[index].IP3;
 IP3_2[index]=cat[index].IP3;
 agek[index]=cat[index].agek;
 for(int i=0;i<CELL_CONN_NUM;i++){
-	gj[index][i]=gj_init;
+	gj[index][i]=0.0;//gj_init;
 }
 }
 __global__ void initialize_ATP(cudaSurfaceObject_t ATP_1,cudaSurfaceObject_t ATP_2) {
@@ -236,6 +256,7 @@ __global__ void finalize_ca2p(CellIterateRange_device cir,CellAttr*cat,real* ca2
 	const int index=threadIdx.x+blockIdx.x*blockDim.x;
 	if(index>=cir.nums[CS_asz])return;
 	cat[index].ca2p_avg=ca2p_avg[index]/Ca_ITR;
+	//if(ca2p_avg[index]!=0.0&&ca2p_avg[index]<200.0)printf("much:%d %f %f %f %f\n",index,cat[index].ca2p_avg,ca2p_avg[index],IP3[index],exinert[index]);
 	cat[index].ex_inert=exinert[index];
 	cat[index].IP3=IP3[index];
 }
@@ -251,18 +272,28 @@ __global__ void ca2p_proc_parent(
 		initialize_ca2p_calc<<<cir.nums[CS_asz]/256+1,256>>>
 				(cir,cat,gj,ca2p1,ca2p2,ca2p_avg,diffu,exinert,IP3_1,IP3_2,agek);
 		initialize_ATP<<<dim3(NY,NZ),NX>>>(ATP_1,ATP_2);
-
+		cudaDeviceSynchronize();
 		for(unsigned int i=0;i<Ca_ITR;i++){
 		dead_IP3_calc<<<cir.size<CI_DEAD>()/64+1,64>>>(IP3_1,nmc,cir,IP3_2);
 
 		supra_calc<<<cir.size<CI_ALIVE,CI_MUSUME,CI_FIX>()/64+1,64>>>(cpos,ca2p1,ca2p2,ca2p_avg,diffu,gj,exinert,IP3_1,IP3_2,nmc,agek,ATP_1,extstim,cir);
-		ATP_refresh<<<dim3(NX/CDIM+1,NY/CDIM+1,NZ/CDIM+1),dim3(CDIM,CDIM,CDIM)>>>(cmap1,cmap2,diffu,ATP_1,ATP_2,zzmax);
-
+		ATP_refresh<<<dim3(NX/CDIM+1,NY/CDIM+1,NZ/CDIM+1),dim3(CDIM,CDIM,CDIM)>>>(cmap1,cmap2,nmc,cir,diffu,ATP_1,ATP_2,zzmax);
+		cudaDeviceSynchronize();
 		_wrap_bound<<<dim3(NY, NZ), NX >>>(ATP_2);
+		cudaDeviceSynchronize();
 		swap_POD(ATP_1,ATP_2);
 		swap_POD(ca2p1,ca2p2);
 		swap_POD(IP3_1,IP3_2);
+		cudaDeviceSynchronize();
+		const int tidx=cir.nums[CS_musume_hd];
+		if(i==Ca_ITR-1){
+
+			printf("check ca2p_avg %f %f %f %f\n",ca2p_avg[tidx],IP3_1[tidx],exinert[tidx],gj[tidx-1][0]);
 		}
+
+		}
+		const int tidx=cir.nums[CS_musume_hd];
+		printf("checklast %d ca2p_avg %f %f %f %f\n",tidx,ca2p_avg[tidx],IP3_1[tidx],exinert[tidx],gj[tidx-1][0]);
 		finalize_ca2p<<<cir.nums[CS_asz]/256+1,256>>>
 						(cir,cat,ca2p_avg,exinert,IP3_1);
 		cir.nums[CS_count_sw]=0;
@@ -281,4 +312,5 @@ ca2p_avg(ubs), diffu(ubs), exinert(ubs), IP3_1(ubs), IP3_2(ubs),agek(ubs);
     		ATP_1.st,ATP_2.st,cm.get_cell_iterate_range_d(),
     		_dptr(gj),
     		_dptr(ca2p1),_dptr(ca2p2),_dptr(ca2p_avg),_dptr(diffu),_dptr(exinert),_dptr(IP3_1),_dptr(IP3_2),_dptr(agek));
+    cudaDeviceSynchronize();
 }

@@ -6,6 +6,8 @@
 //#include <helper_math.h>
 #include <channel_descriptor.h>
 #include <surface_indirect_functions.h>
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
 cudaResourceDesc make_real4_resource_desc(CellPos*r4ptr, size_t len);
 void wrap_bound(cudaTextureObject_t data);
 __global__ void _wrap_bound(cudaTextureObject_t data);
@@ -106,7 +108,7 @@ inline __device__ real4 tex1Dfetch_real4(cudaTextureObject_t tex, int i) {
 }
 //#include <cuda_runtime.h>
 inline __device__ real surf3Dread_real(const cudaSurfaceObject_t sur,const int x,const int y,const int z) {
-    const int2 d1 = surf3Dread<int2>(sur,x*sizeof(int2),y,z);
+    const int2 d1=surf3Dread<int2>(sur,x*sizeof(int2),y,z);
     /*
     int4 d12 = tex1Dfetch<int4>(tex, i * 2);
     int4 d34 = tex1Dfetch<int4>(tex, i * 2 + 1);
@@ -154,3 +156,46 @@ __device__ inline real grid_avg8_sobj(cudaSurfaceObject_t sur, int ix, int iy, i
         + surf3Dread_real(sur,ix,iy,next_iz) + surf3Dread_real(sur,next_ix,next_iy,iz) + surf3Dread_real(sur,next_ix,iy,next_iz)
         + surf3Dread_real(sur,ix,next_iy,next_iz) + surf3Dread_real(sur,next_ix,next_iy,next_iz));
 }
+
+template<typename T>
+struct dhv_pair {
+    thrust::device_vector<T> dv;
+    thrust::host_vector<T> hv;
+    void push_to_device(){
+        dv = hv;
+    }
+    void fetch() {
+        hv = dv;
+    }
+    T* get_raw_device_ptr() {
+        return thrust::raw_pointer_cast(dv.data());
+    }
+
+    const T* get_raw_device_ptr()const {
+        return thrust::raw_pointer_cast(dv.data());
+    }
+
+    void memset_zero_both() {
+        std::memset(&hv[0], 0x00, sizeof(T)*hv.size());
+        CUDA_SAFE_CALL(cudaMemset(get_raw_device_ptr(), 0x00, sizeof(T)*dv.size()));
+    }
+    void make_margin(size_t base_size) {
+        constexpr double coef = 1.5;
+        dv.resize(size_t(base_size*coef+1));
+        hv.resize(size_t(base_size*coef+1));
+    }
+    void make_margin() {
+        const size_t sz = hv.size();
+        make_margin(sz);
+    }
+
+    size_t actual_vector_size()const {
+        assert(dv.size() == hv.size());
+        return hv.size();
+    }
+
+
+
+
+};
+
