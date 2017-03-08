@@ -10,43 +10,6 @@ __device__ static inline real fB(real age, real B, bool cornif) {
     //using namespace cont;
     return (cornif&&age > THRESH_DEAD - DUR_ALIVE&&age <= THRESH_DEAD + DUR_DEAD ? real(1.0) : real(0.0)) - kb*B;
 }
-/*
-__global__ void _calc_ext_stim(const cudaSurfaceObject_t ext_stim, 
-    const cudaTextureObject_t cmap1,
-    const cudaTextureObject_t cmap2,
-    const CellAttr* cat,
-    const CellIterateRange_device cir,
-    const real* zzmax, 
-    cudaSurfaceObject_t out_stim)
-{
-    const int iz_bound = (int)((*zzmax + FAC_MAP*NON_MEMB_RAD) *inv_dz);
-    const int z = blockIdx.y;
-    if (z >= iz_bound)return;
-    const int x = threadIdx.x;
-    if (x >= NX)return;
-    const int y = blockIdx.x;
-    const int prev_x = (x - 1 + NX) % NX; const int next_x = (x + 1) % NX;
-    const int prev_y = (y - 1 + NY) % NY; const int next_y = (y + 1) % NY;
-    const int prev_z = z == 0 ? 1 : z - 1; const int next_z = z == NZ-1 ? NZ-2 : z + 1;
-#define midx(xx,yy,zz) (xx+NX*(yy+NY*zz))
-    const int cidx = tex1Dfetch<int>(cmap1,midx(x,y,z));
-    const bool flg_cornified = cir.nums[CS_dead_hd] <= cidx&&cidx < cir.nums[CS_musume_hd];
-    const real dum_age = flg_cornified ? cat[cidx].agek:0.0;
-
-    const real myv = surf3Dread_real(ext_stim, x, y, z);
-    const real outv = myv +
-        DT_Ca*(DB*(
-            tex1Dfetch<int>(cmap2, midx(prev_x, y, z))*(surf3Dread_real(ext_stim, prev_x, y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(next_x, y, z))*(surf3Dread_real(ext_stim, next_x, y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, prev_y, z))*(surf3Dread_real(ext_stim, x, prev_y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, next_y, z))*(surf3Dread_real(ext_stim, x, next_y, z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, y, prev_z))*(surf3Dread_real(ext_stim, x, y, prev_z) - myv)
-            + tex1Dfetch<int>(cmap2, midx(x, y, next_z))*(surf3Dread_real(ext_stim, x, y, next_z) - myv)
-            )*inv_dz*inv_dz
-            + fB(dum_age, myv, flg_cornified));
-   surf3Dwrite_real(outv, out_stim, x, y, z);
-}
-*/
 #define CDIM (4)
 __global__ void _calc_ext_stim_3d(const cudaSurfaceObject_t ext_stim,
     const cudaTextureObject_t cmap1,

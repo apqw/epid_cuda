@@ -332,6 +332,8 @@ __global__ void prepare_state_change_PAIR(SwapStruct sstr, CellIterateRange_devi
     constexpr real unpair_th = unpair_dist_coef*NON_MEMB_RAD_SUM;
     CellAttr& mycat = sstr.cat[raw_idx];
     if (raw_idx < mycat.pair)return;
+    mycat.ageb += DT_Cell*ageb_const(mycat.ca2p_avg, mycat.is_malignant);
+
     if (mycat.spr_nat_len < real(2.0)*NON_MEMB_RAD) {
         mycat.spr_nat_len += DT_Cell*eps_L;
         sstr.cat[mycat.pair].spr_nat_len = mycat.spr_nat_len;
