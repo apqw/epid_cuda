@@ -8,6 +8,7 @@
 #include <surface_indirect_functions.h>
 cudaResourceDesc make_real4_resource_desc(CellPos*r4ptr, size_t len);
 void wrap_bound(cudaTextureObject_t data);
+__global__ void _wrap_bound(cudaTextureObject_t data);
 __device__ inline float intmask_real(int mask, float v) {
     return __int_as_float(__float_as_int(v)&mask);
 }
@@ -146,7 +147,10 @@ inline __device__ real surf3Dread_real(cudaSurfaceObject_t sur, int x, int y, in
 #endif
 
 __device__ inline real grid_avg8_sobj(cudaSurfaceObject_t sur, int ix, int iy, int iz) {
-    return real(0.125)*(surf3Dread_real(sur,ix,iy,iz) + surf3Dread_real(sur,ix + 1,iy,iz) + surf3Dread_real(sur,ix,iy + 1,iz)
-        + surf3Dread_real(sur,ix,iy,iz + 1) + surf3Dread_real(sur,ix + 1,iy + 1,iz) + surf3Dread_real(sur,ix + 1,iy,iz + 1)
-        + surf3Dread_real(sur,ix,iy + 1,iz + 1) + surf3Dread_real(sur,ix + 1,iy + 1,iz + 1));
+	const int next_ix=ix==NX-1?0:ix+1;
+	const int next_iy=iy==NY-1?0:iy+1;
+	const int next_iz=iz==NZ-1?NZ-1:iz+1;
+    return real(0.125)*(surf3Dread_real(sur,ix,iy,iz) + surf3Dread_real(sur,next_ix,iy,iz) + surf3Dread_real(sur,ix,next_iy,iz)
+        + surf3Dread_real(sur,ix,iy,next_iz) + surf3Dread_real(sur,next_ix,next_iy,iz) + surf3Dread_real(sur,next_ix,iy,next_iz)
+        + surf3Dread_real(sur,ix,next_iy,next_iz) + surf3Dread_real(sur,next_ix,next_iy,next_iz));
 }

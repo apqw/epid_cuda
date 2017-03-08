@@ -95,7 +95,7 @@ public:
     
     friend bool operator== (const CellAttr &c1, const CellAttr &c2);
     void print()const;
-    CellAttr();
+    __host__ __device__ CellAttr();
 };
 bool operator== (const CellAttr &c1, const CellAttr &c2);
 /*

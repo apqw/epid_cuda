@@ -22,7 +22,7 @@ class rand_generator {
     curandState* _state;
     int _size;
     void init_state() {
-        _curand_init_ker << <1, _size >> >(_state);
+        _curand_init_ker << <_size/512+1, 512 >> >(_state);
     }
 public:
     curandState* get_state() {
@@ -86,8 +86,14 @@ __device__ bool stochastic_div_test(curandState* cur,real div_age_thresh,bool ma
         return true;
     }
     else {
-        return curand_uniform_real(cur)*(div_age_thresh*stoch_div_time_ratio) <= DT_Cell*weighted_eps_kb(malig)*S2;
-    }
+    	return
+#ifdef FIXED_RANDOM_DIVNUM_UNIFORM
+    	FIXED_RANDOM_DIVNUM_UNIFORM
+#else
+    	curand_uniform_real(cur)
+#endif
+    			*RANDOM_DIVNUM_COEF*(div_age_thresh*stoch_div_time_ratio) <= DT_Cell*weighted_eps_kb(malig)*S2;
+}
 }
 
 __device__ bool is_divide_ready(curandState* cur, real ageb,real div_age_thresh,bool malig,bool has_pair) {
@@ -274,11 +280,12 @@ __global__ void prepare_state_change_ALIVE(SwapStruct sstr, CellIterateRange_dev
     if (index >= cir.size<CI_ALIVE>())return;
     const int raw_idx = cir.idx<CI_ALIVE>(index);
     if (sstr.cat[raw_idx].agek >= THRESH_DEAD) {
-        dbgprintf("ALIVE->DEAD %d\n", raw_idx);
+
         atomicAdd(&cir.nums[CS_count_alive], 1);
         atomicAdd(&cir.nums[CS_count_sw], 1);
         sstr.swp_data[raw_idx] = -2;
         //sstr.record_pending_swap_by_state(raw_idx, swp_idx, DEAD);
+        dbgprintf("ALIVE->DEAD %d sw:%d\n", raw_idx,cir.nums[CS_count_sw]);
     }
     else {
         CellAttr& mycat = sstr.cat[raw_idx];
@@ -564,7 +571,7 @@ __global__ void divide_cell_MUSUME(curandState* cur, SwapStruct sstr, CellIterat
     const int raw_idx = cir.idx<CI_MUSUME_NOPAIR>(index);
     CellAttr& mycat = sstr.cat[raw_idx];
     if (sstr.cat[raw_idx].rest_div_times > 0
-        && is_divide_ready(cur, sstr.cat[raw_idx].ageb, agki_max, sstr.cat[raw_idx].is_malignant,false)) {
+        && is_divide_ready(&cur[index], sstr.cat[raw_idx].ageb, agki_max, sstr.cat[raw_idx].is_malignant,false)) {
         
         CellAttr& mycat = sstr.cat[raw_idx];
         if (mycat.dermis < 0) {
@@ -590,17 +597,21 @@ __global__ void divide_cell_MUSUME(curandState* cur, SwapStruct sstr, CellIterat
         mycat.ageb = 0.0;
         mycat.pair = newc;
         ncat.pair = raw_idx;//fix later
-
+        sstr.cst[newc]=MUSUME;
         real4& mypos = sstr.cpos[raw_idx];
         real4& npos = sstr.cpos[newc];
-        const real4 div_vec = cvmul(real(0.5)*delta_L,div_direction(cur, mypos, sstr.cpos[mycat.dermis]));
-        vadda(&mypos, div_vec);
+        const real4 div_vec = cvmul(real(0.5)*delta_L,div_direction(&cur[index], mypos, sstr.cpos[mycat.dermis]));
+
+
         npos = vsub(mypos, div_vec);
+        DBG_ONLY(printf("%f %f %f %d\n",npos.x,npos.y,npos.z,newc));
+        vadda(&mypos, div_vec);
+
 
         sstr.swp_data[raw_idx] = -2;
         atomicAdd(&cir.nums[CS_count_musume_divided], 1);
-        dbgprintf("NEW MUSUME %d\n", newc);
-        dbgprintf("MUSUME->PAIR %d\n", raw_idx);
+        DBG_ONLY(printf("NEW MUSUME %d\n", newc));
+        DBG_ONLY(printf("MUSUME->PAIR %d\n", raw_idx));
     }
     else {
         mycat.ageb += DT_Cell*ageb_const(mycat.ca2p_avg, mycat.is_malignant);
@@ -615,6 +626,7 @@ __global__ void prepare_state_change_MUSUME_to_pair2(SwapStruct sstr, CellIterat
 
     if (sstr.swp_data[raw_idx] == -1) {
         const int av = atomicAdd(&cir.nums[CS_count_available], 1);
+        DBG_ONLY(printf("muno:%d\n",av));
         sstr.arr_avail[av] = raw_idx; //order will be broken but doesnt matter
     }
     else if (sstr.swp_data[raw_idx] == -2) {
@@ -629,9 +641,11 @@ __global__ void exec_state_change_MUSUME_to_pair(SwapStruct sstr, CellIterateRan
     const int raw_idx = cir.idx<CI_MUSUME_NOPAIR>(index);
     if (sstr.swp_data[raw_idx] == -2) {
         const int st = atomicAdd(&cir.nums[CS_count_store], 1);
+        DBG_ONLY(printf("muno2:%d\n",st));
         const int dest = sstr.arr_avail[st];
         sstr.raw_swap(dest, raw_idx);
         sstr.cat[sstr.cat[dest].pair].pair = dest;
+        DBG_ONLY(printf("pair check: max:%d %d %d\n",cir.nums[CS_asz],sstr.cat[dest].pair,sstr.cst[sstr.cat[dest].pair]));
     }
 }
 
@@ -649,7 +663,7 @@ __global__ void divide_cell_FIX(curandState* cur, SwapStruct sstr, CellIterateRa
     if (index >= cir.size<CI_FIX>())return;
     const int raw_idx = cir.idx<CI_FIX>(index);
     CellAttr& mycat = sstr.cat[raw_idx];
-    if (is_divide_ready(cur, sstr.cat[raw_idx].ageb, agki_max_fix, sstr.cat[raw_idx].is_malignant, false)) {
+    if (is_divide_ready(&cur[index], sstr.cat[raw_idx].ageb, agki_max_fix, sstr.cat[raw_idx].is_malignant, false)) {
 
         
         if (mycat.dermis < 0) {
@@ -676,22 +690,24 @@ __global__ void divide_cell_FIX(curandState* cur, SwapStruct sstr, CellIterateRa
         mycat.ageb = 0.0;
         mycat.pair = newc;
         ncat.pair = raw_idx;//fix later
-
+        sstr.cst[newc]=MUSUME;
         real4& mypos = sstr.cpos[raw_idx];
         real4& npos = sstr.cpos[newc];
-        const real4 div_vec = cvmul(real(0.5)*delta_L, div_direction(cur, mypos, sstr.cpos[mycat.dermis]));
-        vadda(&mypos, div_vec);
-        npos = vsub(mypos, div_vec);
+        const real4 div_vec = cvmul(real(0.5)*delta_L, div_direction(&cur[index], mypos, sstr.cpos[mycat.dermis]));
 
-        dbgprintf("NEW PAIR %d\n", newc);
-        dbgprintf("FIX->*PAIR %d\n", raw_idx);
+        npos = vsub(mypos, div_vec);
+        DBG_ONLY(printf("%f %f %f %d\n",npos.x,npos.y,npos.z,newc));
+                vadda(&mypos, div_vec);
+
+        DBG_ONLY(printf("NEW PAIR %d\n", newc));
+        DBG_ONLY(printf("FIX->*PAIR %d\n", raw_idx));
     }
     else {
         mycat.ageb += DT_Cell*ageb_const(mycat.ca2p_avg, mycat.is_malignant);
     }
 }
 void exec_renew(CellManager&cm) {
-    static rand_generator rng(2048);
+    static rand_generator rng(2048*10);
     SwapStruct sstr; CellIterateRange_device cir = cm.get_cell_iterate_range_d();
     sstr.arr_avail = cm.swap_idx_store_ptr();
     sstr.swp_data = cm.swap_data_ptr();

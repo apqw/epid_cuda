@@ -131,9 +131,10 @@ __global__ void supra_calc(const CellPos*cpos,
     const size_t sz = nmc.conn.size();
     real tmp_diffu = 0.0;
     real tmp_IP3 = 0.0;
-    real tmp_gj = 0.0;
+    //real tmp_gj = 0.0;
     const real myca2p = ca2p_in[raw_idx];
     gj_data& mygj = gj[raw_idx];
+
     for (int i = 0; i < sz; i++) {
         const int opidx = nmc.conn[i];
         //st==ALIVE||st==DEAD||st==FIX||st==MUSUME
@@ -147,6 +148,7 @@ __global__ void supra_calc(const CellPos*cpos,
             }
         }
     }
+
    const real duo= diff_u_out[raw_idx]= ca2p_reaction_factor(myca2p, exinert[raw_idx], IP3_in[raw_idx],
        grid_avg8_sobj(ext_stim_first, ix, iy, iz)) + ca2p_du*IAGv*tmp_diffu;
    IP3_out[raw_idx] =
@@ -156,6 +158,7 @@ __global__ void supra_calc(const CellPos*cpos,
    ca2p_out[raw_idx] = cs;
    ca2p_avg_out[raw_idx] += cs;
    exinert[raw_idx]+=DT_Ca*ex_inert_diff(myca2p, exinert[raw_idx], _th);
+
    // c->IP3.set_next(c->IP3() + DT_Ca*(IP3_default_diff(_Kpa, grid_avg8(ATP_first(), ix, iy, iz), c->IP3()) + dp*IAGv*tmp_IP3));
 
 }
@@ -165,7 +168,7 @@ __device__ inline real fa(real diffu, real A) {
     return STIM11*min0(diffu) - A*Kaa;
 }
 #define CDIM (4)
-__global__ void init_ca2p_map(const cudaTextureObject_t cmap1,
+__global__ void ATP_refresh(const cudaTextureObject_t cmap1,
     const cudaTextureObject_t cmap2,
     const real* diffu_map,
     const cudaSurfaceObject_t ATP_in, cudaSurfaceObject_t ATP_out,
@@ -203,12 +206,79 @@ __global__ void init_ca2p_map(const cudaTextureObject_t cmap1,
 __global__ void test22() {
     printf("LUL\n");
 }
-__global__ void initialize_ca2p_calc(CellAttr*cat) {
-   // test22 << <1, 128 >> > ();
+__global__ void initialize_ca2p_calc(CellIterateRange_device cir,CellAttr*cat,
+		gj_data*gj,real* ca2p1,real* ca2p2,real* ca2p_avg,real* diffu,real*exinert,real*IP3_1,real*IP3_2,real*agek) {
+const int index=threadIdx.x+blockIdx.x*blockDim.x;
+if(index>=cir.nums[CS_asz])return;
+ca2p1[index]=ca2p_init;
+ca2p2[index]=ca2p_init;
+ca2p_avg[index]=real(0.0);
+diffu[index]=real(0.0);
+exinert[index]=cat[index].ex_inert;
+IP3_1[index]=cat[index].IP3;
+IP3_2[index]=cat[index].IP3;
+agek[index]=cat[index].agek;
+for(int i=0;i<CELL_CONN_NUM;i++){
+	gj[index][i]=gj_init;
 }
-void calc_ca2p(CellManager&cm) {
-    static thrust::device_vector<real> ca2p1, ca2p2, ca2p_avg, diffu, exinert, IP3_1, IP3_2,agek;
-    static thrust::device_vector<gj_data>gj;
-    static cuda3DSurface<real> ATP_1(NX, NY, NZ), ATP_2(NX, NY, NZ);
+}
+__global__ void initialize_ATP(cudaSurfaceObject_t ATP_1,cudaSurfaceObject_t ATP_2) {
+surf3Dwrite_real(real(0.0),ATP_1,threadIdx.x,blockIdx.x,blockIdx.y);
+surf3Dwrite_real(real(0.0),ATP_2,threadIdx.x,blockIdx.x,blockIdx.y);
+}
+template<typename T>
+__device__ void swap_POD(T& s1,T& s2){
+	T tmp=s1;
+	s1=s2;
+	s2=tmp;
+}
+__global__ void finalize_ca2p(CellIterateRange_device cir,CellAttr*cat,real* ca2p_avg,real*exinert,real*IP3){
+	const int index=threadIdx.x+blockIdx.x*blockDim.x;
+	if(index>=cir.nums[CS_asz])return;
+	cat[index].ca2p_avg=ca2p_avg[index]/Ca_ITR;
+	cat[index].ex_inert=exinert[index];
+	cat[index].IP3=IP3[index];
+}
+__global__ void ca2p_proc_parent(
+		CellAttr*cat,NonMembConn*nmc,CellPos*cpos,cudaSurfaceObject_t extstim,cudaTextureObject_t cmap1,cudaTextureObject_t cmap2,
+		const real*zzmax,
+		cudaSurfaceObject_t ATP_1,cudaSurfaceObject_t ATP_2,
+		CellIterateRange_device cir,gj_data*gj,
+		real* ca2p1,real* ca2p2,real* ca2p_avg,real* diffu,real*exinert,real*IP3_1,real*IP3_2,real*agek){
+	if(!(threadIdx.x==0&&blockIdx.x==0))return;
+	if(cir.nums[CS_count_sw]>=SW_THRESH){
+		printf("test sw\ntest sw\ntest sw\ntest sw\ntest sw\n");
+		initialize_ca2p_calc<<<cir.nums[CS_asz]/256+1,256>>>
+				(cir,cat,gj,ca2p1,ca2p2,ca2p_avg,diffu,exinert,IP3_1,IP3_2,agek);
+		initialize_ATP<<<dim3(NY,NZ),NX>>>(ATP_1,ATP_2);
 
+		for(unsigned int i=0;i<Ca_ITR;i++){
+		dead_IP3_calc<<<cir.size<CI_DEAD>()/64+1,64>>>(IP3_1,nmc,cir,IP3_2);
+
+		supra_calc<<<cir.size<CI_ALIVE,CI_MUSUME,CI_FIX>()/64+1,64>>>(cpos,ca2p1,ca2p2,ca2p_avg,diffu,gj,exinert,IP3_1,IP3_2,nmc,agek,ATP_1,extstim,cir);
+		ATP_refresh<<<dim3(NX/CDIM+1,NY/CDIM+1,NZ/CDIM+1),dim3(CDIM,CDIM,CDIM)>>>(cmap1,cmap2,diffu,ATP_1,ATP_2,zzmax);
+
+		_wrap_bound<<<dim3(NY, NZ), NX >>>(ATP_2);
+		swap_POD(ATP_1,ATP_2);
+		swap_POD(ca2p1,ca2p2);
+		swap_POD(IP3_1,IP3_2);
+		}
+		finalize_ca2p<<<cir.nums[CS_asz]/256+1,256>>>
+						(cir,cat,ca2p_avg,exinert,IP3_1);
+		cir.nums[CS_count_sw]=0;
+	}
+}
+
+void calc_ca2p(CellManager&cm,const cudaSurfaceObject_t extstim,cudaTextureObject_t cmap1,cudaTextureObject_t cmap2) {
+	const size_t ubs=2*cm.all_size();
+    static thrust::device_vector<real> ca2p1(ubs), ca2p2(ubs),
+ca2p_avg(ubs), diffu(ubs), exinert(ubs), IP3_1(ubs), IP3_2(ubs),agek(ubs);
+    static thrust::device_vector<gj_data>gj(ubs);
+    static cuda3DSurface<real> ATP_1(NX, NY, NZ), ATP_2(NX, NY, NZ);
+#define _dptr(v) thrust::raw_pointer_cast(v.data())
+
+    ca2p_proc_parent<<<1,32>>>(cm.get_device_attr(),cm.get_device_all_nm_conn(),cm.get_device_pos_all(),extstim,cmap1,cmap2,cm.zzmax_ptr(),
+    		ATP_1.st,ATP_2.st,cm.get_cell_iterate_range_d(),
+    		_dptr(gj),
+    		_dptr(ca2p1),_dptr(ca2p2),_dptr(ca2p_avg),_dptr(diffu),_dptr(exinert),_dptr(IP3_1),_dptr(IP3_2),_dptr(agek));
 }

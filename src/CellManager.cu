@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <numeric>
-CellAttr::CellAttr()
+__host__ __device__ CellAttr::CellAttr()
     :fix_origin(-1),
     pair(-1),
     ca2p_avg(0.0),
@@ -26,6 +26,7 @@ CellAttr::CellAttr()
     rest_div_times(0),
     is_malignant(false),
     is_touch(false),
+    dermis(-1),
     nullified(false) {}
 /*
 bool operator== (const CellDataSet &c1, const CellDataSet &cds) {
@@ -215,7 +216,7 @@ void CellManager::load(std::string pb_path)
     try {
         verify_pb_data(&cs);
     }
-    catch (std::exception e) {
+    catch (std::exception& e) {
         throw std::runtime_error("Failed to verify the cell data set with the following reason(s):"_s + e.what());
     }
     CellPos cp;
@@ -291,18 +292,24 @@ size_t CellManager::all_size()const {
 }
 void CellManager::_push_cell_heads() {
     dev_csize_storage.resize(64);
-    
-    thrust::fill(dev_csize_storage.begin(), dev_csize_storage.end(), 0);
+    thrust::device_vector<int> tmpv(64,0);
+    tmpv[1]=81818;
+    thrust::host_vector<int> tmph(64,0);
+    //thrust::fill(dev_csize_storage.begin(), dev_csize_storage.end(), 0);
+printf("ueeuue\n");
+tmph[CS_msz] = _msz;
+    printf("ueeuue__\n");
+    tmph[CS_asz] = _asz;
+    tmph[CS_fix_hd] = _fix_hd;
+    tmph[CS_der_hd] = _der_hd;
+    tmph[CS_air_hd] = _air_hd;
+    tmph[CS_dead_hd] = _dead_hd;
+    tmph[CS_alive_hd] = _alive_hd;
+    tmph[CS_musume_hd] = _musume_hd;
+    tmph[CS_pair_hd] = _pair_hd;
 
-    dev_csize_storage[CS_msz] = _msz;
-    dev_csize_storage[CS_asz] = _asz;
-    dev_csize_storage[CS_fix_hd] = _fix_hd;
-    dev_csize_storage[CS_der_hd] = _der_hd;
-    dev_csize_storage[CS_air_hd] = _air_hd;
-    dev_csize_storage[CS_dead_hd] = _dead_hd;
-    dev_csize_storage[CS_alive_hd] = _alive_hd;
-    dev_csize_storage[CS_musume_hd] = _musume_hd;
-    dev_csize_storage[CS_pair_hd] = _pair_hd;
+    thrust::copy(tmph.begin(),tmph.end(),dev_csize_storage.begin());
+    printf("ueeuue2\n");
     //dev_csize_storage[CS_pair_end] = _pair_end;
 
 }
@@ -411,13 +418,13 @@ void CellManager::_setup_order_and_count_host()
     thrust::host_vector<CellAttr> tmp_cattr(_asz);
     thrust::host_vector<CELL_STATE> tmp_cst(_asz);
     thrust::host_vector<NonMembConn> tmp_nmconn(_asz);
-    /*
+
     int qq = 0;
     for (int i = 0; i < _asz; i++) {
         if (cattr_all.hv[i].pair >= 0)printf("%d:%d  %d %d\n", i, cattr_all.hv[i].pair, cattr_all.hv[cattr_all.hv[i].pair].pair == i ? 1 : 0,qq++);
     }
-    */
-    //printf("\n\n");
+
+    printf("\n\n");
     for (int i = 0; i < _asz; i++) {
         subindices[indices[i]] = i;
     }
@@ -435,13 +442,13 @@ void CellManager::_setup_order_and_count_host()
     _refresh_cell_count();
     auto mur = get_cell_state_range<CI_MUSUME>();
     std::iota(indices.begin()+mur.first, indices.begin() + mur.second, mur.first);
-    /*
+
     qq = 0;
     for (int i = 0; i < _asz; i++) {
         if (cattr_all.hv[i].pair >= 0)printf("%d:%d:%d  %d %d\n", mur.first, i, cattr_all.hv[i].pair, cattr_all.hv[cattr_all.hv[i].pair].pair== i?1:0,qq++);
     }
     printf("\n\n");
-    */
+
     std::stable_partition(indices.begin() + mur.first, indices.begin() + mur.second,
         [&](int i)->bool {
         return cattr_all.hv[i].pair < 0;
@@ -470,17 +477,18 @@ void CellManager::_setup_order_and_count_host()
             cattr_all.hv[cattr_all.hv[i].pair].pair = i;
         }
     }
-    /*
+
     qq = 0;
     for (int i = 0; i < _asz; i++) {
         if(cattr_all.hv[i].pair>=0)printf("%d:%d:%d %d %d\n", mur.first, i, cattr_all.hv[i].pair, cattr_all.hv[cattr_all.hv[i].pair].pair == i ? 1 : 0,qq++);
     }
-    */
     
-    _refresh_cell_pair_count();
 
+    _refresh_cell_pair_count();
+printf("eusyo\n");
 
     _push_cell_heads();
+    printf("eusy2\n");
 }
 
 void CellManager::set_up_after_load()
@@ -552,7 +560,8 @@ cudaTextureObject_t CellManager::get_pos_tex()
 
 void CellManager::refresh_pos_tex()
 {
-    size_t asz = all_size();
+    size_t asz = cpos_all.actual_vector_size();
+
     cudaTextureObject_t ct;
     cudaResourceDesc resDesc = make_real4_resource_desc(get_device_pos_all(), asz);
     cudaTextureDesc texDesc;
@@ -607,6 +616,7 @@ void CellManager::fetch()
     //non_memb_data.cattr.fetch();
     cpos_all.fetch();
     cattr_all.fetch();
+    cstate_all.fetch();
     _asz = dev_csize_storage[CS_asz];
     //thrust::copy(cpos_all.begin(), cpos_all.begin() + memb_size(), memb_data.cpos.hv.begin());
    // thrust::copy(cpos_all.begin() + memb_size(), cpos_all.end(), non_memb_data.cpos.hv.begin());
@@ -887,6 +897,9 @@ CellManager::CellManager()
     _dead_hd = 0;
     _alive_hd = 0;
     _musume_hd = 0;
+    _pair_end=0;
+    _pair_hd=0;
+    pos_tex=0;
     v_zzmax.resize(1);
 }
 

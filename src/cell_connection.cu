@@ -279,7 +279,7 @@ void connect_cell(CellManager & cman)
    // connect_proc2 << <(sz - nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(), cman.get_device_all_nm_conn(), nm_start, sz);
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    int flt_num = 0;
+   // int flt_num = 0;
     //const CellIndex* ci=cman.nm_filter.filter_by_state<FIX, MUSUME>(&flt_num);
     //CellIterateRange mfcir = cman.get_cell_iterate_range<CI_MUSUME, CI_FIX>();
     

@@ -7,6 +7,7 @@ using CELL_STATE_internal = unsigned short;
 #define USE_DOUBLE_AS_REAL
 static constexpr double M_PId = double(3.141592653589793238463);
 static constexpr float M_PIf = float(3.14159265358979f);
+#undef M_PI
 #ifdef USE_DOUBLE_AS_REAL
 typedef double4 real4;
 typedef double3 real3;
@@ -16,7 +17,9 @@ typedef double real;
 #define R4FMT "%lf"
 #define REAL_MAX (DBL_MAX)
 #define sqrtr(v) sqrt((double)(v))
-#define M_PI M_PId
+
+ #define M_PI M_PId
+
 #else
 typedef float real;
 typedef float4 real4;
@@ -26,7 +29,9 @@ typedef float1 real1;
 #define R4FMT "%f"
 #define REAL_MAX (FLT_MAX)
 #define sqrtr(v) sqrtf(v)
-#define M_PI M_PIf
+
+ #define M_PI M_PIf
+
 #endif
 using CellPos = real4;
 enum CELL_STATE :CELL_STATE_internal {
@@ -103,15 +108,15 @@ static constexpr real THRESH_DEAD = 22.0;
 static constexpr real ADHE_CONST = 31.3;
 static constexpr int DISA_conn_num_thresh = 11; //Nc
 
-                                                /** MUSUME—p•ª—ôŠJŽn”N—î‚Ì‚µ‚«‚¢’l*/
+                                                /** MUSUMEï¿½pï¿½ï¿½ï¿½ï¿½Jï¿½nï¿½Nï¿½ï¿½Ì‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½l*/
 static constexpr real agki_max = 6.0;
 static constexpr real eps_L = 0.14;//ok
 static constexpr real unpair_dist_coef = 0.9;
 
-/** FIX—p•ª—ôŠJŽn”N—î‚Ì”{—¦ */
+/** FIXï¿½pï¿½ï¿½ï¿½ï¿½Jï¿½nï¿½Nï¿½ï¿½Ì”{ï¿½ï¿½ */
 static constexpr real fac = 1;
 
-/** FIX—p•ª—ôŠJŽn”N—î‚Ì‚µ‚«‚¢’l */
+/** FIXï¿½pï¿½ï¿½ï¿½ï¿½Jï¿½nï¿½Nï¿½ï¿½Ì‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½l */
 static constexpr real agki_max_fix = fac*agki_max;
 
 static constexpr real kb = 0.025;
@@ -164,6 +169,10 @@ static constexpr real Kaa = 0.5;//ok
 static constexpr real COMPRESS_FACTOR = 4.0;
 static constexpr real P_MEMB = 1.0/COMPRESS_FACTOR;
 static constexpr real DER_DER_CONST = 0.08;//harden original 0.2
+static constexpr unsigned int SW_THRESH=20;
+
+static constexpr real gj_init = 0.99;
+//static constexpr real ca2p_init = 0.122;
 #define CUDA_SAFE_CALL(func) \
 do { \
      cudaError_t err = (func); \
@@ -172,7 +181,8 @@ do { \
          exit(err); \
      } \
 } while(0)
-
+//#define FIXED_RANDOM_DIVNUM_UNIFORM (real(0.00001))
+#define RANDOM_DIVNUM_COEF real(1.0)
 #define WARP_SIZE (32)
 #ifdef NDEBUG
 #define DBG_ONLY(s) do{}while(0)
