@@ -135,7 +135,7 @@ int main(int argc,char**argv) {
             printf("out %d", i);
         }
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
-        //DBG_ONLY(printf("count:%d\n", i));
+        //printf("count:%d\n", i);
     }
     
 

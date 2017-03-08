@@ -245,6 +245,7 @@ __global__ void prepare_state_change_MUSUME_NOPAIR(SwapStruct sstr,CellIterateRa
     if (sstr.cat[raw_idx].dermis < 0 && sstr.cat[raw_idx].pair < 0) {
         dbgprintf("MU->ALIVE %d\n", raw_idx);
         atomicAdd(&cir.nums[CS_count_musume_nopair],1);
+        sstr.cst[raw_idx]=ALIVE;
         sstr.swp_data[raw_idx] = -2;
         //sstr.record_pending_swap_by_state(raw_idx, swp_idx,ALIVE);
     }
@@ -286,6 +287,7 @@ __global__ void prepare_state_change_ALIVE(SwapStruct sstr, CellIterateRange_dev
         sstr.swp_data[raw_idx] = -2;
         //sstr.record_pending_swap_by_state(raw_idx, swp_idx, DEAD);
         dbgprintf("ALIVE->DEAD %d sw:%d\n", raw_idx,cir.nums[CS_count_sw]);
+        sstr.cst[raw_idx]=DEAD;
     }
     else {
         CellAttr& mycat = sstr.cat[raw_idx];
@@ -434,6 +436,7 @@ __global__ void _state_change_count_apply_and_init(int*swp_data,  CellIterateRan
 __global__ void prepare_remove_AIR(SwapStruct sstr, CellIterateRange_device cir) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     if (index >= cir.size<CI_AIR>())return;
+    //printf("something wrong\n");
     const int raw_idx = cir.idx<CI_AIR>(index);
     if (sstr.cat[raw_idx].agek >= ADHE_CONST&&sstr.nmconn[raw_idx].conn.size() <= DISA_conn_num_thresh) {
         atomicAdd(&cir.nums[CS_count_air], 1);
@@ -483,6 +486,7 @@ __global__ void prepare_remove_DEAD2(SwapStruct sstr, CellIterateRange_device ci
 
     if (sstr.swp_data[raw_idx] == -1) {
         const int av = atomicAdd(&cir.nums[CS_count_available], 1);
+        //printf("is this available? %d alivehead:%d\n",raw_idx,cir.nums[CS_alive_hd]);
         sstr.arr_avail[av] = raw_idx; //order will be broken but doesnt matter
     }
     else if (sstr.swp_data[raw_idx] == -2) {
@@ -498,6 +502,7 @@ __global__ void exec_remove_DEAD(SwapStruct sstr, CellIterateRange_device cir) {
     if (sstr.swp_data[raw_idx] == -2) {
         //atomicAdd(&cir.nums[CS_count_removed_dead], 1);
         const int st = atomicAdd(&cir.nums[CS_count_removed], 1);
+        //printf("set removed dead %d from %d\n",raw_idx,sstr.arr_avail[st]);
         sstr.set_from(raw_idx,sstr.arr_avail[st]);
     }
 }
@@ -518,6 +523,7 @@ __global__ void finalize_remove_DEAD(SwapStruct sstr, CellIterateRange_device ci
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     const int rest = cir.size<CI_DEAD>() - index;
     if (rest <= 0 || rest>cir.nums[CS_count_removed_air])return;
+
     const int raw_idx = cir.idx<CI_DEAD>(index);
     sstr.set_from(cir.nums[CS_dead_hd]- cir.nums[CS_count_removed_air]+rest-1, raw_idx);
     //fill from head. if enough elements is there,completely filled.if not,whole of them are moved to head
@@ -528,6 +534,8 @@ __global__ void finalize_remove_ALIVE(SwapStruct sstr, CellIterateRange_device c
     const int rest = cir.size<CI_ALIVE>() - index;
     if (rest <= 0 || rest>cir.nums[CS_count_removed])return;
     const int raw_idx = cir.idx<CI_ALIVE>(index);
+    //printf("executed %d %d alh:%d\n",cir.nums[CS_alive_hd] - cir.nums[CS_count_removed]+rest-1, raw_idx,cir.nums[CS_alive_hd]);
+
     sstr.set_from(cir.nums[CS_alive_hd] - cir.nums[CS_count_removed]+rest-1, raw_idx);
 }
 
@@ -708,6 +716,76 @@ __global__ void divide_cell_FIX(curandState* cur, SwapStruct sstr, CellIterateRa
         mycat.ageb += DT_Cell*ageb_const(mycat.ca2p_avg, mycat.is_malignant);
     }
 }
+__device__ static int nummap(CELL_STATE st){
+    switch (st) {
+    case MEMB:
+        return 0;
+    case FIX:case DUMMY_FIX:
+        return 1;
+    case DER:
+        return 2;
+    case AIR:
+        return 3;
+    case DEAD:
+        return 4;
+    case ALIVE:
+        return 5;
+    case MUSUME:
+        return 6;
+    case UNUSED:
+    case DISA:
+    case BLANK:
+        return 1023;
+    default:
+        return -1;
+    	//throw std::runtime_error("Undefined cell state found.");
+    }
+}
+__global__ void check_order(SwapStruct sstr, CellIterateRange_device cir){
+	if(threadIdx.x!=0||blockIdx.x!=0)return;
+	int last_state=nummap(MEMB);
+	for(int i=0;i<cir.nums[CS_asz];i++){
+		int current_state=nummap(sstr.cst[i]);
+		if(last_state!=current_state){
+		if(last_state>=current_state){
+			printf("wrong order:%d %d %d\n",i,current_state,last_state);
+			break;
+		}else{
+			int head=-1;
+			switch(sstr.cst[i]){
+		    case MEMB:
+		        head=0;
+		        break;
+		    case FIX:case DUMMY_FIX:
+		        head=cir.nums[CS_fix_hd];
+		        break;
+		    case DER:
+		    	head=cir.nums[CS_der_hd];
+		    			        break;
+		    case AIR:
+		    	head=cir.nums[CS_air_hd];
+		    			        break;
+		    case DEAD:
+		    	head=cir.nums[CS_dead_hd];
+		    			        break;
+		    case ALIVE:
+		    	head=cir.nums[CS_alive_hd];
+		    			        break;
+		    case MUSUME:
+		    	head=cir.nums[CS_musume_hd];
+		    			        break;
+		    			        default:
+		    			        break;
+			}
+			if(i!=head){
+				printf("wrong head %d %d %d\n",i,head,current_state);
+				break;
+			}
+		}
+		}
+		last_state=current_state;
+	}
+}
 void exec_renew(CellManager&cm) {
     static rand_generator rng(2048*10);
     SwapStruct sstr; CellIterateRange_device cir = cm.get_cell_iterate_range_d();
@@ -750,6 +828,9 @@ void exec_renew(CellManager&cm) {
     _NTH(prepare_state_change_MUSUME_to_pair2);
     _NTH(exec_state_change_MUSUME_to_pair);
     _divide_count_apply_and_init _KERM(asz / 64 + 1, 64) (sstr.swp_data, cir);
-   
-   // cudaDeviceSynchronize();
+   /*
+   cudaDeviceSynchronize();
+   check_order<<<1,1>>>(sstr,cir);
+   cudaDeviceSynchronize();
+   */
 }
