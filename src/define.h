@@ -186,8 +186,12 @@ do { \
 #define WARP_SIZE (32)
 #ifdef NDEBUG
 #define DBG_ONLY(s) do{}while(0)
+#define DBG_ONLY_B(...) do{}while(0)
 #define dbgprintf(x,...) do{}while(0)
 #else
 #define DBG_ONLY(s) do{s;}while(0)
+#define DBG_ONLY_B(...) do{__VA_ARGS__}while(0)
 #define dbgprintf(x,...) printf((x),__VA_ARGS__)
 #endif
+
+

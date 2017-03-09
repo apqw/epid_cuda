@@ -334,13 +334,14 @@ __global__ void prepare_state_change_PAIR(SwapStruct sstr, CellIterateRange_devi
     constexpr real unpair_th = unpair_dist_coef*NON_MEMB_RAD_SUM;
     CellAttr& mycat = sstr.cat[raw_idx];
     if (raw_idx < mycat.pair)return;
+    real distsq;
     mycat.ageb += DT_Cell*ageb_const(mycat.ca2p_avg, mycat.is_malignant);
-
     if (mycat.spr_nat_len < real(2.0)*NON_MEMB_RAD) {
+
         mycat.spr_nat_len += DT_Cell*eps_L;
         sstr.cat[mycat.pair].spr_nat_len = mycat.spr_nat_len;
     }
-    else if (p_dist_sq(sstr.cpos[raw_idx], sstr.cpos[mycat.pair])>unpair_th*unpair_th) {
+    else if ((distsq=p_dist_sq(sstr.cpos[raw_idx], sstr.cpos[mycat.pair]))>unpair_th*unpair_th) {
         if (sstr.cst[mycat.pair] == FIX) {
             atomicAdd(&cir.nums[CS_count_pair], 1);
             sstr.swp_data[raw_idx] = -2;
@@ -356,6 +357,7 @@ __global__ void prepare_state_change_PAIR(SwapStruct sstr, CellIterateRange_devi
             //printf("\n2 unpaired %d %d\n", raw_idx, mycat.pair);
         }
 
+        dbgprintf("unpaired distsq:%f\n",distsq);
         mycat.spr_nat_len = 0.0;
         sstr.cat[mycat.pair].spr_nat_len = 0.0;
         sstr.cat[mycat.pair].pair = -1;
@@ -373,10 +375,14 @@ __global__ void prepare_state_change_PAIR2(SwapStruct sstr, CellIterateRange_dev
     const int raw_idx = cir.idx<CI_PAIR>(index);
 
     if (sstr.swp_data[raw_idx] == -1) {
+    	DBG_ONLY(printf("pair non overlap %d, pair:%d\n",raw_idx,sstr.cat[raw_idx].pair));
         const int av = atomicAdd(&cir.nums[CS_count_available], 1);
         sstr.arr_avail[av] = raw_idx; //order will be broken but doesnt matter
+
+        //if(sstr.cat[raw_idx].pair)
     }
     else if (sstr.swp_data[raw_idx] == -2) {
+    	DBG_ONLY(printf("pair overlapped %d\n",raw_idx));
         sstr.swp_data[raw_idx] = -1;
     }
 }
@@ -386,10 +392,14 @@ __global__ void exec_state_change_PAIR(SwapStruct sstr, CellIterateRange_device 
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     if (index >= cir.size<CI_PAIR>())return;
     const int raw_idx = cir.idx<CI_PAIR>(index);
+
     if (sstr.swp_data[raw_idx] == -2) {
         const int st = atomicAdd(&cir.nums[CS_count_store], 1);
         const int dest = sstr.arr_avail[st];
-        sstr.cat[sstr.cat[dest].pair].pair=raw_idx;
+        const int pair_reserve=sstr.cat[dest].pair;
+        __syncthreads();//race occurs when pairs are in swap area
+        sstr.cat[pair_reserve].pair=raw_idx;
+        __syncthreads();
         sstr.raw_swap(sstr.arr_avail[st], raw_idx);
     }
 }
@@ -653,8 +663,12 @@ __global__ void exec_state_change_MUSUME_to_pair(SwapStruct sstr, CellIterateRan
         const int st = atomicAdd(&cir.nums[CS_count_store], 1);
         DBG_ONLY(printf("muno2:%d\n",st));
         const int dest = sstr.arr_avail[st];
+        const int pair_reserved = sstr.cat[raw_idx].pair;
+        __syncthreads();
+        sstr.cat[pair_reserved].pair=dest;
+        __syncthreads();
         sstr.raw_swap(dest, raw_idx);
-        sstr.cat[sstr.cat[dest].pair].pair = dest;
+        //sstr.cat[sstr.cat[dest].pair].pair = dest;
         DBG_ONLY(printf("pair check: max:%d %d %d\n",cir.nums[CS_asz],sstr.cat[dest].pair,sstr.cst[sstr.cat[dest].pair]));
     }
 }
@@ -744,8 +758,10 @@ __device__ static int nummap(CELL_STATE st){
 __global__ void check_order(SwapStruct sstr, CellIterateRange_device cir){
 	if(threadIdx.x!=0||blockIdx.x!=0)return;
 	int last_state=nummap(MEMB);
+	bool last_mu_pair=false;
 	for(int i=0;i<cir.nums[CS_asz];i++){
 		int current_state=nummap(sstr.cst[i]);
+		bool current_mu_pair=sstr.cat[i].pair>=0 && i>=cir.nums[CS_musume_hd];
 		if(last_state!=current_state){
 		if(last_state>=current_state){
 			printf("wrong order:%d %d %d\n",i,current_state,last_state);
@@ -783,6 +799,17 @@ __global__ void check_order(SwapStruct sstr, CellIterateRange_device cir){
 			}
 		}
 		}
+
+		if(last_mu_pair&&!current_mu_pair){
+			printf("pair wrong order:%d\n",i);
+						break;
+		}
+		if(sstr.cat[i].pair>=0){
+			if(sstr.cat[sstr.cat[i].pair].pair!=i){
+				printf("wrong pairing:%d pair:%d return:%d\n",i,sstr.cat[i].pair,sstr.cat[sstr.cat[i].pair].pair);
+		}
+		}
+		last_mu_pair=current_mu_pair;
 		last_state=current_state;
 	}
 }
@@ -828,9 +855,11 @@ void exec_renew(CellManager&cm) {
     _NTH(prepare_state_change_MUSUME_to_pair2);
     _NTH(exec_state_change_MUSUME_to_pair);
     _divide_count_apply_and_init _KERM(asz / 64 + 1, 64) (sstr.swp_data, cir);
-   /*
+
+   DBG_ONLY_B(
    cudaDeviceSynchronize();
    check_order<<<1,1>>>(sstr,cir);
    cudaDeviceSynchronize();
-   */
+   );
+
 }

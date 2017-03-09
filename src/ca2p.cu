@@ -268,7 +268,7 @@ __global__ void ca2p_proc_parent(
 		real* ca2p1,real* ca2p2,real* ca2p_avg,real* diffu,real*exinert,real*IP3_1,real*IP3_2,real*agek){
 	if(!(threadIdx.x==0&&blockIdx.x==0))return;
 	if(cir.nums[CS_count_sw]>=SW_THRESH){
-		printf("test sw\ntest sw\ntest sw\ntest sw\ntest sw\n");
+		printf("ca2p calc...\n");
 		initialize_ca2p_calc<<<cir.nums[CS_asz]/256+1,256>>>
 				(cir,cat,gj,ca2p1,ca2p2,ca2p_avg,diffu,exinert,IP3_1,IP3_2,agek);
 		initialize_ATP<<<dim3(NY,NZ),NX>>>(ATP_1,ATP_2);
@@ -288,12 +288,12 @@ __global__ void ca2p_proc_parent(
 		const int tidx=cir.nums[CS_musume_hd];
 		if(i==Ca_ITR-1){
 
-			printf("check ca2p_avg %f %f %f %f\n",ca2p_avg[tidx],IP3_1[tidx],exinert[tidx],gj[tidx-1][0]);
+			//printf("check ca2p_avg %f %f %f %f\n",ca2p_avg[tidx],IP3_1[tidx],exinert[tidx],gj[tidx-1][0]);
 		}
 
 		}
 		const int tidx=cir.nums[CS_musume_hd];
-		printf("checklast %d ca2p_avg %f %f %f %f\n",tidx,ca2p_avg[tidx],IP3_1[tidx],exinert[tidx],gj[tidx-1][0]);
+		//printf("checklast %d ca2p_avg %f %f %f %f\n",tidx,ca2p_avg[tidx],IP3_1[tidx],exinert[tidx],gj[tidx-1][0]);
 		finalize_ca2p<<<cir.nums[CS_asz]/256+1,256>>>
 						(cir,cat,ca2p_avg,exinert,IP3_1);
 		cir.nums[CS_count_sw]=0;

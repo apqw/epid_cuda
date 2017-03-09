@@ -110,7 +110,7 @@ int main(int argc,char**argv) {
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
    
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 100000; i++) {
         
         const size_t msz = cm.memb_size();
         calc_cell_movement(cm);
@@ -127,15 +127,15 @@ int main(int argc,char**argv) {
         cmap1_texr.refresh(); cmap2_texr.refresh();
         calc_ext_stim(cm, &ext_stim.st, cmap1_texr, cmap2_texr, cm.zzmax_ptr(), &ext_stim_out.st);
         calc_ca2p(cm,ext_stim.st,cmap1_texr.ct,cmap2_texr.ct);
-        if ((i % 1000 == 0&&i!=0)) {
+        if ((i % 1000 == 0)) {
             printf("fetching\n");
             cm.fetch();
             printf("done\n");
-            cm.output_old(std::to_string(i));
-            printf("out %d", i);
+            cm.output_old(std::to_string(i/1000));
+            printf("out %d", i/1000);
         }
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
-        //printf("count:%d\n", i);
+        DBG_ONLY(printf("count:%d\n", i));
     }
     
 
