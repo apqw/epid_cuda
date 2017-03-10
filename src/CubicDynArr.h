@@ -42,16 +42,17 @@ class CubicDynArrTexReader {
     T* data;
 public:
     cudaTextureObject_t ct;
-    CubicDynArrTexReader() {}
-    CubicDynArrTexReader(int x, int y, int z, T*ptr) :X(x), Y(y), Z(z), data(ptr) {
+
+    CubicDynArrTexReader(int x, int y, int z, T*ptr) :X(x), Y(y), Z(z), data(ptr),ct(0) {
     }
-    
+    CubicDynArrTexReader():CubicDynArrTexReader(0,0,0,nullptr) {}
     template<typename U>
     __host__ cudaResourceDesc make_rd(T*ptr, size_t bsize) {
         throw std::logic_error("DO NOT USE TexReader with incompatible types");
     }
     
     __host__ void refresh() {
+    	if(ct!=0)cudaDestroyTextureObject(ct);
         cudaTextureObject_t tmp_ct;
         cudaResourceDesc resDesc = make_rd<T>(data, X*Y*Z * sizeof(T));
         cudaTextureDesc texDesc;

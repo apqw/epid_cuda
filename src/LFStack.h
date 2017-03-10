@@ -18,6 +18,7 @@ public:
 
 	};
     __device__ void push_back_d(const T& d) {
+
         data[atomicAdd(&head, 1)] = d;
     };
 	__device__ void push_back_d(T&& d){
@@ -39,6 +40,10 @@ public:
     __host__ __device__ void copy_fast(const LFStack<T,N>* ptr) {
         head = ptr->head;
         memcpy(&data[0], &ptr->data[0], sizeof(T)*ptr->head);
+    }
+
+    __host__ __device__ bool isvalid()const{
+    	return head<N;
     }
 
     template<typename T1, unsigned N1>

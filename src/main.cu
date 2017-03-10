@@ -94,6 +94,7 @@ int main(int argc,char**argv) {
     */
     //cm_disp_test(cm);
     //cudaDeviceSynchronize();
+    cm.refresh_pos_tex();
     std::cout << "Continue." << std::endl;
     connect_cell(cm);
     cudaDeviceSynchronize();
@@ -110,22 +111,29 @@ int main(int argc,char**argv) {
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
    
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
-    for (int i = 0; i < 100000; i++) {
+
+    for (int i = 0; i < 1000000; i++) {
         
         const size_t msz = cm.memb_size();
         calc_cell_movement(cm);
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
         cm.refresh_pos_tex();
         exec_renew(cm);
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
         cm.refresh_pos_tex();
         //cm.asz_fetch();
         connect_cell(cm);
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
         map_gen(cm, cmap1.acc, cmap2.acc);
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         cm.refresh_zzmax();
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         cmap1_texr.refresh(); cmap2_texr.refresh();
         calc_ext_stim(cm, &ext_stim.st, cmap1_texr, cmap2_texr, cm.zzmax_ptr(), &ext_stim_out.st);
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         calc_ca2p(cm,ext_stim.st,cmap1_texr.ct,cmap2_texr.ct);
         if ((i % 1000 == 0)) {
             printf("fetching\n");
@@ -134,8 +142,8 @@ int main(int argc,char**argv) {
             cm.output_old(std::to_string(i/1000));
             printf("out %d", i/1000);
         }
-        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
-        DBG_ONLY(printf("count:%d\n", i));
+        //CUDA_SAFE_CALL(cudaDeviceSynchronize());
+        //printf("count:%d\n", i);
     }
     
 

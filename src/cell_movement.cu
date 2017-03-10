@@ -8,15 +8,30 @@
 //#include "filter.h"
 
 template<class Fn>
-__device__ void cell_movement_calc(real4* accum_out, const real4 c1, const real4 c2, Fn calc_fn) {
+__device__ void cell_movement_calc_dbg(real4* accum_out, const real4 c1, const real4 c2, Fn calc_fn,int idx1,int idx2,int st1,int st2) {
+	const real tmp=calc_fn(c1, c2);
+if(fabs(tmp)>100){
+		printf("too strong interaction:%f cell:%d %d state:%d %d\n",tmp,idx1,idx2,st1,st2);
+		assert(false);
+	}else if (fabs(tmp)>10){
+		printf("warn: strong interaction:%f cell:%d %d state:%d %d\n",tmp,idx1,idx2,st1,st2);
+	}
     vadda(accum_out, cvmul(calc_fn(c1, c2), vpsub(c1, c2)));
 }
 
 template<class Fn>
-__device__ void cell_movement_calc_eachAdd(real4* accum_out, real4* op_add, const real4 c1, const real4 c2, Fn calc_fn) {
+__device__ real cell_movement_calc(real4* accum_out, const real4 c1, const real4 c2, Fn calc_fn) {
+	const real tmp=calc_fn(c1, c2);
+    vadda(accum_out, cvmul(tmp, vpsub(c1, c2)));
+    return tmp;
+}
+template<class Fn>
+__device__ real cell_movement_calc_eachAdd(real4* accum_out, real4* op_add, const real4 c1, const real4 c2, Fn calc_fn) {
+	const real tmp=calc_fn(c1, c2);
     const real4 diff = cvmul(calc_fn(c1, c2), vpsub(c1, c2));
     atomicvsuba(op_add, cvmul(DT_Cell, diff));
     vadda(accum_out, diff);
+    return tmp;
 }
 /////////calc funcs
 __device__ inline bool no_double_count(const CellIndex c1, const CellIndex c2) {
@@ -126,14 +141,17 @@ struct c_memb_to_memb {
 
         const real dist_sq = p_dist_sq(c1, c2);
         if (dist_sq < cr_dist_sq) {
+
             const real LJ6 = POW3(cr_dist_sq) / POW3(dist_sq);
             return real(4.0)*eps_m*LJ6*(LJ6 - real(1.0)) / dist_sq;
         }
         else if (dist_sq < MEMB_RAD_SUM_SQ) {
+
             return -DER_DER_CONST*(cr_dist_inv - rsqrt(dist_sq));
             //-(DER_DER_CONST / distlj) * (distlj / cr_dist - 1.0);
         }
         else {
+        	printf("3rd calc memb-memb\n");
             const real distlj = sqrt(dist_sq);
             constexpr real lambda_dist = (real(1.0) + P_MEMB)*MEMB_RAD_SUM;
             const real LJ6 = POW6(cr_dist) / POW6(lambda_dist - distlj);
@@ -299,7 +317,21 @@ __device__ inline real wall_interaction(const real cz) {
 }
 
 ////////////// Kers
-
+#define STRENGTH_TH (real(100.0))
+#define STRENGTH_TH_PRE (real(25.0))
+#ifdef NDEBUG
+#define _TH_CHK(tmp_name,myidx,opidx,pos1,pos2,f...) do{f;}while(0)
+#else
+#define _TH_CHK(tmp_name,myidx,opidx,pos1,pos2,f...) do{const real tmp_name=f;\
+if(fabs(tmp)>STRENGTH_TH){\
+	printf("too strong interaction ::\ncoef:%f cell:%d %d\npos1:%f %f %f\npos2:%f %f %f  > " #f "\n",tmp_name,myidx,opidx,\
+pos1.x,pos1.y,pos1.z,pos2.x,pos2.y,pos2.z);\
+	assert(false);\
+}else if (fabs(tmp)>STRENGTH_TH_PRE){\
+printf("warn:strong interaction ::\ncoef:%f cell:%d %d\npos1:%f %f %f\npos2:%f %f %f  > " #f "\n",tmp_name,myidx,opidx,\
+pos1.x,pos1.y,pos1.z,pos2.x,pos2.y,pos2.z);\
+}}while(0)
+#endif
 __global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* cst, const MembConn* mconn,
     const NonMembConn* all_nm_conn, size_t sz, CellPos* out) {
     int index = threadIdx.x + blockIdx.x*blockDim.x;
@@ -313,7 +345,7 @@ __global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* 
 
     for (int i = 0; i < MEMB_CONN_NUM; i++) {
         const real4 op = tex1Dfetch_real4(pos_tex, mconn[index].conn[i]);
-        cell_movement_calc(&dr, mypos, op, c_memb_to_memb());
+        _TH_CHK(tmp,index,mconn[index].conn[i],mypos,op,cell_movement_calc(&dr, mypos, op, c_memb_to_memb()));
     }
 
     const NonMembConn& nmc = all_nm_conn[index];
@@ -321,7 +353,9 @@ __global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* 
     for (int i = 0; i < conn_sz; i++) {
         const int op_idx = nmc.conn[i];
         const real4 op = tex1Dfetch_real4(pos_tex, op_idx);
-        if (cst[op_idx - sz] != FIX&&cst[op_idx - sz] != MUSUME) cell_movement_calc(&dr, mypos, op, c_other_nm_memb());
+        if (cst[op_idx] != FIX&&cst[op_idx] != MUSUME){
+        	_TH_CHK(tmp,index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_other_nm_memb()));
+        }
     }
 
     dr.z += z_dis;
@@ -342,15 +376,18 @@ __global__ void DER_interaction(const cudaTextureObject_t pos_tex, const NonMemb
     __shared__ size_t connsz_sh[DER_TH / THREAD_DIV_DER];
     __shared__ real4 out_dr[DER_TH];
     const int raw_cell_index = cir.idx<CI_DER>(index);
+    if(threadIdx.x==0){
+    	memset(out_dr, 0x00, sizeof(out_dr));
+    }
     if (th_id == 0) {
-        memset(out_dr, 0x00, sizeof(out_dr));
+
         connsz_sh[b_id] = all_nm_conn[raw_cell_index].conn.size();
         mypos_sh[b_id] = tex1Dfetch_real4(pos_tex, raw_cell_index);
     }
     __syncthreads();
     const NonMembConn& nmc = all_nm_conn[raw_cell_index];
     const size_t conn_sz = connsz_sh[b_id];
-    if (conn_sz <= th_id)return;
+    //if (conn_sz <= th_id)return;
 
 
     const CellPos mypos = mypos_sh[b_id];
@@ -361,15 +398,15 @@ __global__ void DER_interaction(const cudaTextureObject_t pos_tex, const NonMemb
         const int op_idx = nmc.conn[i];
         if (op_idx >= mbsz) {
             if (cir.nums[CS_der_hd]<=op_idx&&op_idx<cir.nums[CS_air_hd]) {
-                cell_movement_calc(&dr, mypos, op, c_der_to_der());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_der_to_der()));
 
             }
             else {
-                cell_movement_calc(&dr, mypos, op, c_other_nm());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_other_nm()));
             }
         }
         else {
-            cell_movement_calc(&dr, mypos, op, c_other_nm_memb());
+        	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_other_nm_memb()));
         }
 
 
@@ -407,11 +444,11 @@ const NonMembConn* all_nm_conn, const CellIterateRange_device cir, int mbsz, Cel
         const real4 op = tex1Dfetch_real4(pos_tex, nmc.conn[i]);
         const int op_idx = nmc.conn[i];
         if (op_idx >= mbsz || (cir.nums[CS_der_hd] <= op_idx&&op_idx<cir.nums[CS_air_hd])) {
-            cell_movement_calc(&dr, mypos, op,
-                c_al_air_de_to_al_air_de_fix_mu(myagek, cat[op_idx].agek));
+        	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op,
+                c_al_air_de_to_al_air_de_fix_mu(myagek, cat[op_idx].agek)));
         }
         else {
-            cell_movement_calc(&dr, mypos, op, c_other_nm_memb());
+        	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_other_nm_memb()));
         }
 
 
@@ -435,8 +472,11 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
     __shared__ size_t connsz_sh[FIX_TH / THREAD_DIV_FIX];
     __shared__ real4 out_dr[FIX_TH];
     const int raw_cell_index = cir.idx<CI_FIX>(index);
+    if(threadIdx.x==0){
+        	memset(out_dr, 0x00, sizeof(out_dr));
+        }
     if (th_id == 0) {
-        memset(out_dr, 0x00, sizeof(out_dr));
+
         connsz_sh[b_id] = all_nm_conn[raw_cell_index].conn.size();
         mypos_sh[b_id] = tex1Dfetch_real4(pos_tex, raw_cell_index);
     }
@@ -444,7 +484,7 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
     
     const NonMembConn& nmc = all_nm_conn[raw_cell_index];
     const size_t conn_sz = connsz_sh[b_id];
-    if (conn_sz <= th_id)return;
+    //if (conn_sz <= th_id)return;
 
 
     const CellPos mypos = mypos_sh[b_id];
@@ -464,18 +504,18 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
             switch (st) {
             case FIX:case MUSUME:
                 if (myattr.pair != op_idx) {
-                    cell_movement_calc(&dr, mypos, op, c_fix_mu_to_fix_mu());
+                	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_fix_mu_to_fix_mu()));
                 }
                 break;
             case ALIVE:case AIR:case DEAD:
 
-                cell_movement_calc(&dr, mypos, op,
-                    c_al_air_de_to_al_air_de_fix_mu(myattr.agek, cat[op_idx].agek));
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op,
+                    c_al_air_de_to_al_air_de_fix_mu(myattr.agek, cat[op_idx].agek)));
 
                 break;
             default:
 
-                cell_movement_calc(&dr, mypos, op, c_other_nm());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_other_nm()));
 
                 break;
             }
@@ -483,10 +523,10 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
         else {
 
             if (myattr.dermis == op_idx) {
-                cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_fix_to_memb());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_fix_to_memb()));
             }
             else {
-                cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_other_nm_memb());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_other_nm_memb()));
             }
 
         }
@@ -517,8 +557,11 @@ __global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const Cell
     __shared__ size_t connsz_sh[MUSUME_TH / THREAD_DIV_MU];
     __shared__ real4 out_dr[MUSUME_TH];
     const int raw_cell_index = cir.idx<CI_MUSUME>(index);
+    if(threadIdx.x==0){
+        	memset(out_dr, 0x00, sizeof(out_dr));
+        }
     if (th_id == 0) {
-        memset(out_dr, 0x00, sizeof(out_dr));
+
         connsz_sh[b_id] = all_nm_conn[raw_cell_index].conn.size();
         mypos_sh[b_id] = tex1Dfetch_real4(pos_tex, raw_cell_index);
     }
@@ -526,7 +569,7 @@ __global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const Cell
     
     const NonMembConn& nmc = all_nm_conn[raw_cell_index];
     const size_t conn_sz = connsz_sh[b_id];
-    if (conn_sz <= th_id)return;
+    //if (conn_sz <= th_id)return;
     const CellPos mypos = mypos_sh[b_id];
     real4& dr = out_dr[threadIdx.x]; dr = { real(0.0), real(0.0), real(0.0), real(0.0) };
     const CellAttr& myattr = cat[raw_cell_index];
@@ -550,25 +593,25 @@ __global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const Cell
             switch (st) {
             case FIX:case MUSUME:
                 if (myattr.pair != op_idx) {
-                    cell_movement_calc(&dr, mypos, op, c_fix_mu_to_fix_mu());
+                	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_fix_mu_to_fix_mu()));
                 }
                 break;
             case ALIVE:case AIR:case DEAD:
-                cell_movement_calc(&dr, mypos, op,
-                    c_al_air_de_to_al_air_de_fix_mu(myattr.agek, cat[op_idx].agek));
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op,
+                    c_al_air_de_to_al_air_de_fix_mu(myattr.agek, cat[op_idx].agek)));
                 break;
             default:
-                cell_movement_calc(&dr, mypos, op, c_other_nm());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_other_nm()));
                 break;
             }
         }
         else {
 
             if (myattr.dermis == op_idx) {
-                cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_mu_to_memb(spr));
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_mu_to_memb(spr)));
             }
             else {
-                cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_other_nm_memb());
+            	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc_eachAdd(&dr, &out[op_idx], mypos, op, c_other_nm_memb()));
             }
 
         }
@@ -600,7 +643,7 @@ __global__ void pair_interaction(const cudaTextureObject_t pos_tex, const CellAt
     
     const CellPos mypos = tex1Dfetch_real4(pos_tex, raw_cell_index);
     const CellPos pairpos = tex1Dfetch_real4(pos_tex, cat.pair);
-    cell_movement_calc(&dr, mypos, pairpos, c_pair(cat.spr_nat_len));
+    _TH_CHK(tmp,raw_cell_index,cat.pair,mypos,pairpos,cell_movement_calc(&dr, mypos, pairpos, c_pair(cat.spr_nat_len)));
     vadda(&out[raw_cell_index], cvmul(DT_Cell, dr));
     vadda(&out[cat.pair], cvmul(-DT_Cell, dr));
 }

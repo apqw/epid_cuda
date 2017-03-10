@@ -8,21 +8,30 @@
 #include <iostream>
 #include "cuda_helper_misc.h"
 #include "LFStack.h"
+/*
+#undef DBG_ONLY
+#undef DBG_ONLY_B
+#undef dbgprintf
+#define DBG_ONLY(s) do{s;}while(0)
+#define DBG_ONLY_B(...) do{__VA_ARGS__}while(0)
+#define dbgprintf(x,...) printf((x),__VA_ARGS__)
+*/
 #ifdef USE_DOUBLE_AS_REAL
 #define curand_uniform_real curand_uniform_double
 #define curand_uniform2_real curand_uniform2_double
 #else
 #define curand_uniform_real curand_uniform
 #endif
-__global__ void _curand_init_ker(curandState* stt) {
+__global__ void _curand_init_ker(curandState* stt,size_t sz) {
     const int idx= blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx>=sz)return;
     curand_init(8181,idx, 0, &stt[idx]);
 }
 class rand_generator {
     curandState* _state;
     int _size;
     void init_state() {
-        _curand_init_ker << <_size/512+1, 512 >> >(_state);
+        _curand_init_ker << <_size/512+1, 512 >> >(_state,_size);
     }
 public:
     curandState* get_state() {
@@ -813,6 +822,14 @@ __global__ void check_order(SwapStruct sstr, CellIterateRange_device cir){
 		last_state=current_state;
 	}
 }
+__global__ void check_order_parallel(SwapStruct sstr, CellIterateRange_device cir){
+	const int index = threadIdx.x + blockIdx.x*blockDim.x;
+	if(index>=cir.nums[CS_asz]-1)return;
+	if(nummap(sstr.cst[index+1])<nummap(sstr.cst[index])){
+		printf("wrong order:%d %d %d\n",index,nummap(sstr.cst[index]),nummap(sstr.cst[index+1]));
+		assert(false);
+	}
+}
 void exec_renew(CellManager&cm) {
     static rand_generator rng(2048*10);
     SwapStruct sstr; CellIterateRange_device cir = cm.get_cell_iterate_range_d();
@@ -824,7 +841,7 @@ void exec_renew(CellManager&cm) {
     sstr.nmconn = cm.get_device_all_nm_conn();
     size_t asz = cm.all_size();
 #define _KERM(a,b) <<<a,b>>>
-#define _NTH(fn) fn _KERM(asz/64+1,64)(sstr,cir)
+#define _NTH(fn) fn _KERM((asz)/64+1,64)(sstr,cir)
     //do in this order
     
     _NTH(prepare_state_change_ALIVE);
@@ -856,10 +873,14 @@ void exec_renew(CellManager&cm) {
     _NTH(exec_state_change_MUSUME_to_pair);
     _divide_count_apply_and_init _KERM(asz / 64 + 1, 64) (sstr.swp_data, cir);
 
-   DBG_ONLY_B(
+/*
    cudaDeviceSynchronize();
    check_order<<<1,1>>>(sstr,cir);
    cudaDeviceSynchronize();
-   );
-
+*/
+    /*
+    cudaDeviceSynchronize();
+check_order_parallel<<<(asz*2)/64+1,64>>>(sstr,cir);
+cudaDeviceSynchronize();
+*/
 }

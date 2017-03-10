@@ -352,11 +352,13 @@ void CellManager::_refresh_cell_count()
     _alive_hd = ccount[(int)DEAD] + _dead_hd;
     _musume_hd = ccount[(int)ALIVE] + _alive_hd;
     _asz = ccount[(int)MUSUME] + _musume_hd;
+
     cpos_all.make_margin(_asz);
     cattr_all.make_margin(_asz);
     cstate_all.make_margin(_asz);
     all_nm_conn.make_margin(_asz);
     size_t actual_size = cpos_all.actual_vector_size();
+    printf("max cpos=%d\n",(int)actual_size);
     cpos_all_tmp_d.resize(actual_size);
     cattr_all_tmp_d.resize(actual_size);
     cstate_all_tmp_d.resize(actual_size);
@@ -561,7 +563,7 @@ cudaTextureObject_t CellManager::get_pos_tex()
 void CellManager::refresh_pos_tex()
 {
     size_t asz = cpos_all.actual_vector_size();
-
+    if(pos_tex!=0)cudaDestroyTextureObject(pos_tex);
     cudaTextureObject_t ct;
     cudaResourceDesc resDesc = make_real4_resource_desc(get_device_pos_all(), asz);
     cudaTextureDesc texDesc;
@@ -569,6 +571,7 @@ void CellManager::refresh_pos_tex()
     texDesc.readMode = cudaReadModeElementType;
 
     cudaCreateTextureObject(&ct, &resDesc, &texDesc, NULL);
+
     pos_tex = ct;
 }
 
