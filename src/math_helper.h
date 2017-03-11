@@ -19,29 +19,95 @@ __host__ __device__ inline real rmod(real v1,const real r1){
 	return v1;
 }
 */
+#define FAST_PDIFF
+#ifdef FAST_PDIFF
+__device__ inline double p_diff_x(const double x1, const double x2){
+	constexpr double thr=0.5*LX;
+	const double diff = x1 - x2;
+	long long int sgn2 = __double_as_longlong(thr-__longlong_as_double(__double_as_longlong(diff)&0x7FFFFFFFFFFFFFFFLL))&0x8000000000000000LL;
+	sgn2>>=32;
+	sgn2>>=16;
+	sgn2>>=8;
+	sgn2>>=4;
+	sgn2>>=2;
+	sgn2>>=1;
+	return diff-__longlong_as_double((__double_as_longlong(LX)^(__double_as_longlong(diff)&0x8000000000000000LL))&sgn2);
+}
 
+__device__ inline float p_diff_x(const float x1, const float x2){
+	constexpr float thr=0.5f*LX;
+	const float diff = x1 - x2;
+	int sgn2 = __float_as_int(thr-__int_as_float(__float_as_int(diff)&0x7FFFFFFF))&0x80000000;
+	sgn2>>=16;
+	sgn2>>=8;
+	sgn2>>=4;
+	sgn2>>=2;
+	sgn2>>=1;
+	return diff-__int_as_float((__float_as_int(LX)^(__float_as_int(diff)&0x80000000))&sgn2);
+
+}
+
+__device__ inline double p_diff_y(const double x1, const double x2){
+	constexpr double thr=0.5*LY;
+	const double diff = x1 - x2;
+	long long int sgn2 = __double_as_longlong(thr-__longlong_as_double(__double_as_longlong(diff)&0x7FFFFFFFFFFFFFFFLL))&0x8000000000000000LL;
+	sgn2>>=32;
+	sgn2>>=16;
+	sgn2>>=8;
+	sgn2>>=4;
+	sgn2>>=2;
+	sgn2>>=1;
+	return diff-__longlong_as_double((__double_as_longlong(LY)^(__double_as_longlong(diff)&0x8000000000000000LL))&sgn2);
+
+}
+
+__device__ inline float p_diff_y(const float x1, const float x2){
+	constexpr float thr=0.5f*LY;
+	const float diff = x1 - x2;
+	int sgn2 = __float_as_int(thr-__int_as_float(__float_as_int(diff)&0x7FFFFFFF))&0x80000000;
+	sgn2>>=16;
+	sgn2>>=8;
+	sgn2>>=4;
+	sgn2>>=2;
+	sgn2>>=1;
+	return diff-__int_as_float((__float_as_int(LY)^(__float_as_int(diff)&0x80000000))&sgn2);
+
+}
+#else
 __host__ __device__ inline real p_diff_x(const real x1, const real x2){
+	constexpr real thr=real(0.25)*LX*LX;
 	const real diff = x1 - x2;
+	const real l_or_zero=real(0.5)*(LX+copysign(LX,diff*diff-thr));
+	return diff-copysign(l_or_zero,diff);
+	/*
 	if (diff > real(0.5)*LX)return diff - LX;
 	if (diff <= real(-0.5)*LX)return diff + LX;
 	return diff;
+	*/
 }
 
-__host__ __device__ inline real p_diff_y(const real x1, const real x2){
+
+__host__ __device__ inline float p_diff_y(const float x1, const float x2){
+	constexpr real thr=real(0.25)*LY*LY;
 	const real diff = x1 - x2;
+	const real l_or_zero=real(0.5)*(LY+copysign(LY,diff*diff-thr));
+		return diff-copysign(l_or_zero,diff);
+	/*
 	if (diff > real(0.5)*LY)return diff - LY;
 	if (diff <= real(-0.5)*LY)return diff + LY;
 	return diff;
+	*/
 }
+#endif
 
-__host__ __device__ inline real p_dist_sq(const real x1, const real y1, const real z1, const real x2, const  real y2, const  real z2)
+__device__ inline real p_dist_sq(const real x1, const real y1, const real z1, const real x2, const  real y2, const  real z2)
 {
 	const real diffx = p_diff_x(x1, x2);
 	const real diffy = p_diff_y(y1, y2);
 	const real diffz = z1 - z2;
 	return diffx*diffx + diffy*diffy + diffz*diffz;
 }
-__host__ __device__ inline real p_dist_sq(const  real4 v1, const  real4 v2){
+__device__ inline real p_dist_sq(const  real4 v1, const  real4 v2){
 	return p_dist_sq(v1.x,v1.y,v1.z,v2.x,v2.y,v2.z);
 }
 
@@ -60,7 +126,7 @@ __host__ __device__ inline real4 vsub(const real4 v1, const real4 v2){
 	return {v1.x-v2.x,v1.y-v2.y,v1.z-v2.z,v1.w-v2.w};
 }
 
-__host__ __device__ inline real4 vpsub(const real4 v1, const real4 v2){
+__device__ inline real4 vpsub(const real4 v1, const real4 v2){
 	return {p_diff_x(v1.x,v2.x),p_diff_y(v1.y,v2.y),v1.z-v2.z,v1.w-v2.w};
 }
 
