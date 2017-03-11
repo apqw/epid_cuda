@@ -135,7 +135,7 @@ int main(int argc,char**argv) {
         calc_ext_stim(cm, &ext_stim.st, cmap1_texr, cmap2_texr, cm.zzmax_ptr(), &ext_stim_out.st);
         //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         calc_ca2p(cm,ext_stim.st,cmap1_texr.ct,cmap2_texr.ct);
-        if ((i % 1000 == 0)) {
+        if ((i % 100000 == 0)) {
             printf("fetching\n");
             cm.fetch();
             printf("done\n");

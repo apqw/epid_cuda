@@ -31,7 +31,7 @@ static constexpr int	N3 = 200; //max grid cell num //ok
                                   /** 1�זE�̐ڑ��ő吔 */
 //static constexpr int	N2 = 400; //max conn num //ok
 
-__global__ void grid_init(cudaTextureObject_t pos_tex,const CELL_STATE*cst,CubicDynArrAccessor<LFStack<int, N3>> darr,size_t sz,CellIterateRange_device cir) {
+__global__ void grid_init(cudaTextureObject_t pos_tex,const CELL_STATE*cst,CubicDynArrAccessor<LFStack<int, N3>> darr,CellIterateRange_device cir) {
     //need memset
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < cir.nums[CS_asz]) {
@@ -64,7 +64,7 @@ __global__ void grid_init(cudaTextureObject_t pos_tex,const CELL_STATE*cst,Cubic
 #define connect_proc_THREAD_NUM (128)
 
 #define TH_MULTI (32)
-__global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* all_nm_conn, CubicDynArrAccessor<LFStack<int, N3>> darr, int nmemb_start,size_t sz,CellIterateRange_device cir) {
+__global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* all_nm_conn, CubicDynArrAccessor<LFStack<int, N3>> darr, int nmemb_start,CellIterateRange_device cir) {
     //need memset
     const int th_id = threadIdx.x%TH_MULTI;
     const int index = nmemb_start+blockIdx.x * (blockDim.x/TH_MULTI) + threadIdx.x/TH_MULTI;
@@ -276,9 +276,9 @@ void connect_cell(CellManager & cman)
 
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
 
-    grid_init<<<((unsigned int)sz*2)/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(),cman.get_device_cstate(), area.acc, sz,cir);
+    grid_init<<<((unsigned int)sz*2)/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(),cman.get_device_cstate(), area.acc, cir);
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
-    connect_proc << <TH_MULTI*unsigned(sz*2- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), sz,cir);
+    connect_proc << <TH_MULTI*unsigned(sz*2- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), cir);
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
     DBG_ONLY_B(
     		conn_valid_check<<<sz * 2 / 1024 + 1, 1024 >>>(cman.get_device_all_nm_conn(),cir);

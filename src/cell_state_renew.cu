@@ -839,7 +839,7 @@ void exec_renew(CellManager&cm) {
     sstr.cpos = cm.get_device_pos_all();
     sstr.cst = cm.get_device_cstate();
     sstr.nmconn = cm.get_device_all_nm_conn();
-    size_t asz = cm.all_size();
+    size_t asz = cm.all_size()*2;
 #define _KERM(a,b) <<<a,b>>>
 #define _NTH(fn) fn _KERM((asz)/64+1,64)(sstr,cir)
     //do in this order

@@ -128,11 +128,11 @@ void map_gen(CellManager&cm, CubicDynArrAccessor<int> cmap1, CubicDynArrAccessor
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
     const size_t nmsz = cm.non_memb_size();
     CellIterateRange_device cird = cm.get_cell_iterate_range_d();
-    map_gen_afm<<<AFM_MULTI*nmsz/AFM_THREAD_NUM+1,AFM_THREAD_NUM>>>(cm.get_pos_tex(), cird, cmap1, cmap2);
+    map_gen_afm<<<AFM_MULTI*nmsz*2/AFM_THREAD_NUM+1,AFM_THREAD_NUM>>>(cm.get_pos_tex(), cird, cmap1, cmap2);
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
     const size_t msz = cm.memb_size();
-    map_gen_memb_non_afm << <NMAFM_MULTI*cm.all_size() / NMAFM_THREAD_NUM + 1, NMAFM_THREAD_NUM >> >(cm.get_pos_tex(), cird, cmap1,msz);
+    map_gen_memb_non_afm << <NMAFM_MULTI*cm.all_size()*2 / NMAFM_THREAD_NUM + 1, NMAFM_THREAD_NUM >> >(cm.get_pos_tex(), cird, cmap1,msz);
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
 }

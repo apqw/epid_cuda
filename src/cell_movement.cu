@@ -366,7 +366,7 @@ __global__ void MEMB_interaction(cudaTextureObject_t pos_tex, const CELL_STATE* 
 #define DER_TH (64)
 #define THREAD_DIV_DER (32)
 __global__ void DER_interaction(const cudaTextureObject_t pos_tex, const NonMembConn* all_nm_conn,
-    const CellIterateRange_device cir,int mbsz, CellPos*out) {
+    const CellIterateRange_device cir, CellPos*out) {
 
     const int index = threadIdx.x / THREAD_DIV_DER + blockIdx.x*blockDim.x / THREAD_DIV_DER;
     if (index >= cir.size<CI_DER>())return;
@@ -396,7 +396,7 @@ __global__ void DER_interaction(const cudaTextureObject_t pos_tex, const NonMemb
 
         const real4 op = tex1Dfetch_real4(pos_tex, nmc.conn[i]);
         const int op_idx = nmc.conn[i];
-        if (op_idx >= mbsz) {
+        if (op_idx >= cir.nums[CS_fix_hd]) {
             if (cir.nums[CS_der_hd]<=op_idx&&op_idx<cir.nums[CS_air_hd]) {
             	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op, c_der_to_der()));
 
@@ -429,7 +429,7 @@ __global__ void DER_interaction(const cudaTextureObject_t pos_tex, const NonMemb
 
 
 __global__ void AL_AIR_DE_interaction(const cudaTextureObject_t pos_tex, const CellAttr* cat,
-const NonMembConn* all_nm_conn, const CellIterateRange_device cir, int mbsz, CellPos*out) {
+const NonMembConn* all_nm_conn, const CellIterateRange_device cir, CellPos*out) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     if (index >= cir.size<CI_AIR, CI_DEAD, CI_ALIVE>())return;
     const int raw_cell_index = cir.idx<CI_AIR, CI_DEAD, CI_ALIVE>(index);
@@ -443,7 +443,7 @@ const NonMembConn* all_nm_conn, const CellIterateRange_device cir, int mbsz, Cel
 
         const real4 op = tex1Dfetch_real4(pos_tex, nmc.conn[i]);
         const int op_idx = nmc.conn[i];
-        if (op_idx >= mbsz || (cir.nums[CS_der_hd] <= op_idx&&op_idx<cir.nums[CS_air_hd])) {
+        if (op_idx >= cir.nums[CS_fix_hd]|| (cir.nums[CS_der_hd] <= op_idx&&op_idx<cir.nums[CS_air_hd])) {
         	_TH_CHK(tmp,raw_cell_index,op_idx,mypos,op,cell_movement_calc(&dr, mypos, op,
                 c_al_air_de_to_al_air_de_fix_mu(myagek, cat[op_idx].agek)));
         }
@@ -462,7 +462,7 @@ const NonMembConn* all_nm_conn, const CellIterateRange_device cir, int mbsz, Cel
 #define FIX_TH (32)
 #define THREAD_DIV_FIX (32)
 __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAttr* cat,
-    const CELL_STATE* cst, const NonMembConn* all_nm_conn, const CellIterateRange_device cir, size_t mbsz, CellPos*out) {
+    const CELL_STATE* cst, const NonMembConn* all_nm_conn, const CellIterateRange_device cir, CellPos*out) {
 
     const int index = threadIdx.x / THREAD_DIV_FIX + blockIdx.x*blockDim.x / THREAD_DIV_FIX;
     if (index >= cir.size<CI_FIX>())return;
@@ -498,7 +498,7 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
 
         const real4 op = tex1Dfetch_real4(pos_tex, nmc.conn[i]);
         const int op_idx = nmc.conn[i];
-        if (op_idx >= mbsz) {
+        if (op_idx >= cir.nums[CS_fix_hd]) {
             const CELL_STATE st = cst[op_idx];
 
             switch (st) {
@@ -548,7 +548,7 @@ __global__ void FIX_interaction(const cudaTextureObject_t pos_tex, const CellAtt
 #define MUSUME_TH (64)
 #define THREAD_DIV_MU (32)
 __global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const CellAttr* cat,
-    const CELL_STATE* cst, const NonMembConn* all_nm_conn, const CellIterateRange_device cir, size_t _mbsz, CellPos*out) {
+    const CELL_STATE* cst, const NonMembConn* all_nm_conn, const CellIterateRange_device cir, CellPos*out) {
     const int index = threadIdx.x / THREAD_DIV_MU + blockIdx.x*blockDim.x / THREAD_DIV_MU;
     if (index >= cir.size<CI_MUSUME>())return;
     const int th_id = threadIdx.x%THREAD_DIV_MU;
@@ -587,7 +587,7 @@ __global__ void MUSUME_interaction(const cudaTextureObject_t pos_tex, const Cell
 
         const real4 op = tex1Dfetch_real4(pos_tex, nmc.conn[i]);
         const int op_idx = nmc.conn[i];
-        if (op_idx >= _mbsz) {
+        if (op_idx >= cir.nums[CS_fix_hd]) {
             const CELL_STATE st = cst[op_idx];
 
             switch (st) {
@@ -653,30 +653,31 @@ void calc_cell_movement(CellManager&cman) {
     CellIterateRange_device cird = cman.get_cell_iterate_range_d();
     calc_memb_bend << <(unsigned int)msz / 32 + 1, 32 >> > (cman.get_pos_tex(), cman.get_device_mconn(), msz, cman.get_device_pos_all_out());
 
-    MEMB_interaction << <(unsigned int)msz / 64 + 1, 64>> > (cman.get_pos_tex(), cman.get_device_cstate(), cman.get_device_mconn(), cman.get_device_all_nm_conn(), msz, cman.get_device_pos_all_out());
+    MEMB_interaction << <(unsigned int)msz / 64 + 1, 64>> > (cman.get_pos_tex(), cman.get_device_cstate(),
+    		cman.get_device_mconn(), cman.get_device_all_nm_conn(), msz, cman.get_device_pos_all_out());
     
-    DER_interaction << <THREAD_DIV_DER*nmsz / DER_TH + 1, DER_TH >> > (cman.get_pos_tex(),
-        cman.get_device_all_nm_conn(), cird,msz, cman.get_device_pos_all_out());
-    
-
-    AL_AIR_DE_interaction << <nmsz / 64 + 1, 64 >> > (cman.get_pos_tex(),
-        cman.get_device_attr(),
-         cman.get_device_all_nm_conn(), cird, msz, cman.get_device_pos_all_out());
+    DER_interaction << <THREAD_DIV_DER*nmsz*2 / DER_TH + 1, DER_TH >> > (cman.get_pos_tex(),
+        cman.get_device_all_nm_conn(), cird, cman.get_device_pos_all_out());
     
 
-    FIX_interaction << <THREAD_DIV_FIX*nmsz / FIX_TH + 1, FIX_TH >> > (cman.get_pos_tex(),
+    AL_AIR_DE_interaction << <nmsz*2 / 64 + 1, 64 >> > (cman.get_pos_tex(),
         cman.get_device_attr(),
-        cman.get_device_cstate(), cman.get_device_all_nm_conn(), cird, msz, cman.get_device_pos_all_out());
+         cman.get_device_all_nm_conn(), cird, cman.get_device_pos_all_out());
+    
+
+    FIX_interaction << <THREAD_DIV_FIX*nmsz*2 / FIX_TH + 1, FIX_TH >> > (cman.get_pos_tex(),
+        cman.get_device_attr(),
+        cman.get_device_cstate(), cman.get_device_all_nm_conn(), cird, cman.get_device_pos_all_out());
     
     
 
-    MUSUME_interaction << <THREAD_DIV_MU* nmsz / MUSUME_TH + 1, MUSUME_TH >> > (cman.get_pos_tex(),
+    MUSUME_interaction << <THREAD_DIV_MU* nmsz*2 / MUSUME_TH + 1, MUSUME_TH >> > (cman.get_pos_tex(),
         cman.get_device_attr(),
-        cman.get_device_cstate(), cman.get_device_all_nm_conn(), cird, msz, cman.get_device_pos_all_out());
+        cman.get_device_cstate(), cman.get_device_all_nm_conn(), cird, cman.get_device_pos_all_out());
    
     
 
-    pair_interaction << <nmsz / 128 + 1, 128 >> > (cman.get_pos_tex(),
+    pair_interaction << <nmsz*2 / 128 + 1, 128 >> > (cman.get_pos_tex(),
         cman.get_device_attr(),
         cird, cman.get_device_pos_all_out());
         
