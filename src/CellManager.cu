@@ -187,6 +187,30 @@ void CellManager::asz_fetch()
 {
     _asz = dev_csize_storage[CS_asz];
 }
+
+void CellManager::buffer_size_check(){
+	assert(
+	        cpos_all.actual_vector_size() == cattr_all.actual_vector_size()
+	        && cattr_all.actual_vector_size() == cstate_all.actual_vector_size()
+	        && cstate_all.actual_vector_size() == all_nm_conn.actual_vector_size()
+	        && all_nm_conn.actual_vector_size() == cpos_all.actual_vector_size()
+	    );
+
+	size_t current_all=all_size();
+	while((real)((int)cpos_all.actual_vector_size()-(int)current_all)<(real)cpos_all.actual_vector_size()*resize_rest_ratio){
+		size_t new_size=cpos_all.actual_vector_size()*margin_ratio;
+		if(new_size==0)new_size=16;
+		cpos_all.resize(new_size);
+		cattr_all.resize(new_size);
+		cstate_all.resize(new_size);
+		all_nm_conn.resize(new_size);
+		cpos_all_out.resize(new_size);
+		tmp_pending_flg.resize(new_size);
+		swap_available.resize(new_size);
+		refresh_pos_tex();
+		printf("resized\n");
+	}
+}
 void CellManager::load(std::string pb_path)
 {
     std::ifstream ifs(pb_path, std::ios::in | std::ios::binary);
@@ -821,6 +845,9 @@ void CellManager::add_cell_host(const CellAccessor * cacc)
         
     }
     */
+	if(*cacc->state==FIX){
+		cacc->attr->rest_div_times=div_max;
+	}
     cpos_all.hv.push_back(*cacc->pos);
     cstate_all.hv.push_back(*cacc->state);
     cattr_all.hv.push_back(*cacc->attr);

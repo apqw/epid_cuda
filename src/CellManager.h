@@ -93,7 +93,10 @@ enum CSIZE_STR :int {
     CS_count_pair = 22,
     CS_count_musume_nopair = 23,
     CS_count_sw=24,
-    CS_count_loop_ca2p=25
+    CS_count_loop_ca2p=25,
+    CS_count_num_sc=26,
+    CS_count_actual_removed_air=27,
+    CS_count_actual_removed_dead=28
 };
 struct CellIterateRange_device {
     int* nums;
@@ -265,6 +268,8 @@ __device__  inline int CellIterateRange_device::size<CI_DER, CI_AIR, CI_DEAD, CI
 
 class CellManager
 {
+	static constexpr real margin_ratio=1.5;
+	static constexpr real resize_rest_ratio=0.2;
     dhv_pair<MembConn> mconn; 
     cudaTextureObject_t pos_tex;
     thrust::device_vector<CellPos> cpos_all_out;
@@ -323,7 +328,7 @@ public:
     void _push_cell_heads();
     int* get_dev_csize_ptr();
     CellIterateRange_device get_cell_iterate_range_d();
-    
+    void buffer_size_check();
     template<CellIterateType...CIR>
     std::pair<int, int> get_cell_state_range() {
         throw std::logic_error("Undefined cell range type.");

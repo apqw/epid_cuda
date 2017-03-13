@@ -189,6 +189,11 @@ struct dhv_pair {
         make_margin(sz);
     }
 
+    void resize(size_t s){
+    	dv.resize(s);
+    	hv.resize(s);
+    }
+
     size_t actual_vector_size()const {
         assert(dv.size() == hv.size());
         return hv.size();

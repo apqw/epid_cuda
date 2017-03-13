@@ -22,30 +22,42 @@
 #else
 #define curand_uniform_real curand_uniform
 #endif
-__global__ void _curand_init_ker(curandState* stt,size_t sz) {
+__global__ void _curand_init_ker(curandState* stt,size_t sz,int seed_mod) {
     const int idx= blockIdx.x * blockDim.x + threadIdx.x;
     if(idx>=sz)return;
-    curand_init(8181,idx, 0, &stt[idx]);
+    curand_init(8181+seed_mod,idx, 0, &stt[idx]);
 }
 class rand_generator {
-    curandState* _state;
-    int _size;
+	thrust::device_vector<curandState> stv;
+    //int _size;
+    int smod;
     void init_state() {
-        _curand_init_ker << <_size/512+1, 512 >> >(_state,_size);
+
+        _curand_init_ker << <stv.size()/512+1, 512 >> >(thrust::raw_pointer_cast(stv.data()),stv.size(),smod);
+        smod++;
     }
 public:
     curandState* get_state() {
-        return _state;
+        return thrust::raw_pointer_cast(stv.data());
     }
 
-    rand_generator(int size):_size(size) {
-        cudaMalloc((void**)&_state, size * sizeof(curandState));
+    rand_generator(int size):smod(0) {
+        //cudaMalloc((void**)&_state, size * sizeof(curandState));
+    	stv.resize(size);
         init_state();
     }
-    ~rand_generator() {
-        cudaFree(_state);
-        _state = nullptr;
+    void resize(size_t s){
+    	stv.resize(s);
+    	init_state();
     }
+    ~rand_generator() {
+        //cudaFree(_state);
+        //_state = nullptr;
+    }
+    size_t size()const{
+    	return stv.size();
+    }
+
 };
 __device__ inline real weighted_eps_kb(bool malig) {
     
@@ -540,51 +552,54 @@ __global__ void exec_remove_AIR(SwapStruct sstr, CellIterateRange_device cir) {
 
 __global__ void finalize_remove_DEAD(SwapStruct sstr, CellIterateRange_device cir) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
-    const int rest = cir.size<CI_DEAD>() - index;
-    if (rest <= 0 || rest>cir.nums[CS_count_removed_air])return;
+    const int rest = cir.size<CI_DEAD>()-cir.nums[CS_count_dead] - index;
+    if (rest <= 0 || rest>cir.nums[CS_count_air])return;
 
     const int raw_idx = cir.idx<CI_DEAD>(index);
-    sstr.set_from(cir.nums[CS_dead_hd]- cir.nums[CS_count_removed_air]+rest-1, raw_idx);
+    sstr.set_from(cir.nums[CS_dead_hd]- cir.nums[CS_count_air]+rest-1, raw_idx);
     //fill from head. if enough elements is there,completely filled.if not,whole of them are moved to head
 }
 
 __global__ void finalize_remove_ALIVE(SwapStruct sstr, CellIterateRange_device cir) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     const int rest = cir.size<CI_ALIVE>() - index;
-    if (rest <= 0 || rest>cir.nums[CS_count_removed])return;
+    if (rest <= 0 || rest>cir.nums[CS_count_air]+cir.nums[CS_count_dead])return;
     const int raw_idx = cir.idx<CI_ALIVE>(index);
     //printf("executed %d %d alh:%d\n",cir.nums[CS_alive_hd] - cir.nums[CS_count_removed]+rest-1, raw_idx,cir.nums[CS_alive_hd]);
 
-    sstr.set_from(cir.nums[CS_alive_hd] - cir.nums[CS_count_removed]+rest-1, raw_idx);
+    sstr.set_from(cir.nums[CS_alive_hd] - (cir.nums[CS_count_air]+cir.nums[CS_count_dead])+rest-1, raw_idx);
 }
 
 __global__ void finalize_remove_MUSUME_NOPAIR(SwapStruct sstr, CellIterateRange_device cir) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     const int rest = cir.size<CI_MUSUME_NOPAIR>() - index;
-    if (rest <= 0 || rest>cir.nums[CS_count_removed])return;
+    if (rest <= 0 || rest>cir.nums[CS_count_air]+cir.nums[CS_count_dead])return;
     const int raw_idx = cir.idx<CI_MUSUME_NOPAIR>(index);
-    sstr.set_from(cir.nums[CS_musume_hd] - cir.nums[CS_count_removed] + rest-1, raw_idx);
+    sstr.set_from(cir.nums[CS_musume_hd] - (cir.nums[CS_count_air]+cir.nums[CS_count_dead]) + rest-1, raw_idx);
 }
 
 __global__ void finalize_remove_PAIR(SwapStruct sstr, CellIterateRange_device cir) {
     const int index = threadIdx.x + blockIdx.x*blockDim.x;
     const int rest = cir.size<CI_PAIR>() - index;
-    if (rest <= 0 || rest>cir.nums[CS_count_removed])return;
+    if (rest <= 0 || rest>cir.nums[CS_count_air]+cir.nums[CS_count_dead])return;
     const int raw_idx = cir.idx<CI_PAIR>(index);
-    const int dest = cir.nums[CS_pair_hd] - cir.nums[CS_count_removed] + rest-1;
+    const int dest = cir.nums[CS_pair_hd] - (cir.nums[CS_count_air]+cir.nums[CS_count_dead]) + rest-1;
+    const int pair_reserve=sstr.cat[raw_idx].pair;
+__syncthreads();
+sstr.cat[pair_reserve].pair = dest;
+__syncthreads();
     sstr.set_from(dest, raw_idx);
-    sstr.cat[sstr.cat[dest].pair].pair = dest;
   //  printf("\nremoved  term %d %d %d %d\n",rest, cir.nums[CS_count_removed],dest,raw_idx);
 }
 
 __global__ void _remove_count_apply_and_init(int*swp_data,  CellIterateRange_device cir) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        cir.nums[CS_dead_hd] -= cir.nums[CS_count_removed_air];
-        cir.nums[CS_alive_hd] -= cir.nums[CS_count_removed];
-        cir.nums[CS_musume_hd] -= cir.nums[CS_count_removed];
-        cir.nums[CS_pair_hd] -= cir.nums[CS_count_removed];
+        cir.nums[CS_dead_hd] -= cir.nums[CS_count_air];
+        cir.nums[CS_alive_hd] -= cir.nums[CS_count_air]+cir.nums[CS_count_dead];
+        cir.nums[CS_musume_hd] -= cir.nums[CS_count_air]+cir.nums[CS_count_dead];
+        cir.nums[CS_pair_hd] -= cir.nums[CS_count_air]+cir.nums[CS_count_dead];
        // if (cir.nums[CS_count_removed] != 0)printf("\npairhd %d m:%d\n", cir.nums[CS_pair_hd], cir.nums[CS_count_removed]);
-        cir.nums[CS_asz] -= cir.nums[CS_count_removed];
+        cir.nums[CS_asz] -= cir.nums[CS_count_air]+cir.nums[CS_count_dead];
     }
     
     __syncthreads();
@@ -831,7 +846,12 @@ __global__ void check_order_parallel(SwapStruct sstr, CellIterateRange_device ci
 	}
 }
 void exec_renew(CellManager&cm) {
-    static rand_generator rng(2048*10);
+    static rand_generator rng(2);
+
+    while((double)((int)rng.size()-(int)cm.all_size())<0.2*(double)rng.size()){
+    	rng.resize(rng.size()*1.5);
+    	printf("rng resized %zu\n",rng.size());
+    }
     SwapStruct sstr; CellIterateRange_device cir = cm.get_cell_iterate_range_d();
     sstr.arr_avail = cm.swap_idx_store_ptr();
     sstr.swp_data = cm.swap_data_ptr();
@@ -883,4 +903,123 @@ void exec_renew(CellManager&cm) {
 check_order_parallel<<<(asz*2)/64+1,64>>>(sstr,cir);
 cudaDeviceSynchronize();
 */
+}
+
+__global__ void prepare_sc_init_ALIVE(SwapStruct sstr, CellIterateRange_device cir,real* zzmax) {
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cir.size<CI_ALIVE>())return;
+    const int raw_idx = cir.idx<CI_ALIVE>(index);
+    const real4 mypos=sstr.cpos[raw_idx];
+    if (*zzmax-mypos.z<real(8.0)*NON_MEMB_RAD) {
+
+        atomicAdd(&cir.nums[CS_count_alive], 1);
+        sstr.swp_data[raw_idx] = -2;
+        //sstr.record_pending_swap_by_state(raw_idx, swp_idx, DEAD);
+       // dbgprintf("ALIVE->DEAD %d sw:%d\n", raw_idx,cir.nums[CS_count_sw]);
+        sstr.cst[raw_idx]=AIR;
+        sstr.cat[raw_idx].agek=max(sstr.cat[raw_idx].agek,THRESH_DEAD);
+        //c->agek = c->agek > cont::THRESH_DEAD ? c->agek : cont::THRESH_DEAD;
+    }
+
+}
+__global__ void prepare_sc_init_ALIVE2(SwapStruct sstr, CellIterateRange_device cir) {
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cir.nums[CS_count_alive])return;
+    const int raw_idx = cir.idx<CI_ALIVE>(index);
+
+    if (sstr.swp_data[raw_idx] == -1) {
+        const int av = atomicAdd(&cir.nums[CS_count_available], 1);
+        sstr.arr_avail[av] = raw_idx; //order will be broken but doesnt matter
+    }
+    else if (sstr.swp_data[raw_idx] == -2) {
+        sstr.swp_data[raw_idx] = -1;
+    }
+}
+
+__global__ void sc_init_exec_swap_ALIVE(SwapStruct sstr, CellIterateRange_device cir) {
+
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cir.size<CI_ALIVE>())return;
+    const int raw_idx = cir.idx<CI_ALIVE>(index);
+    if (sstr.swp_data[raw_idx] ==-2) {
+        const int st = atomicAdd(&cir.nums[CS_count_store], 1);
+        sstr.raw_swap(sstr.arr_avail[st], raw_idx);
+    }
+}
+
+__global__ void _sc_init_phase1_init(int*swp_data,  CellIterateRange_device cir) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+            cir.nums[CS_alive_hd] += cir.nums[CS_count_alive];
+            cir.nums[CS_count_num_sc]=NUM_SC_INIT;
+    }
+    _swp_init(swp_data,  cir);
+}
+
+__global__ void prepare_sc_init_DEAD_m(SwapStruct sstr, CellIterateRange_device cir) {
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cir.size<CI_DEAD>())return;
+    const int raw_idx = cir.idx<CI_DEAD>(index);
+    if (sstr.cst[raw_idx]==AIR) {
+
+        atomicAdd(&cir.nums[CS_count_dead], 1);
+        sstr.swp_data[raw_idx] = -2;
+        //sstr.record_pending_swap_by_state(raw_idx, swp_idx, DEAD);
+       // dbgprintf("ALIVE->DEAD %d sw:%d\n", raw_idx,cir.nums[CS_count_sw]);
+        //c->agek = c->agek > cont::THRESH_DEAD ? c->agek : cont::THRESH_DEAD;
+    }
+
+}
+
+__global__ void prepare_sc_init_DEAD_m2(SwapStruct sstr, CellIterateRange_device cir) {
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cir.nums[CS_count_dead])return;
+    const int raw_idx = cir.idx<CI_DEAD>(index);
+
+    if (sstr.swp_data[raw_idx] == -1) {
+        const int av = atomicAdd(&cir.nums[CS_count_available], 1);
+        sstr.arr_avail[av] = raw_idx; //order will be broken but doesnt matter
+    }
+    else if (sstr.swp_data[raw_idx] == -2) {
+        sstr.swp_data[raw_idx] = -1;
+    }
+}
+
+__global__ void sc_init_exec_swap_DEAD_m(SwapStruct sstr, CellIterateRange_device cir) {
+
+    const int index = threadIdx.x + blockIdx.x*blockDim.x;
+    if (index >= cir.size<CI_DEAD>())return;
+    const int raw_idx = cir.idx<CI_DEAD>(index);
+    if (sstr.swp_data[raw_idx] ==-2) {
+        const int st = atomicAdd(&cir.nums[CS_count_store], 1);
+        sstr.raw_swap(sstr.arr_avail[st], raw_idx);
+    }
+}
+
+__global__ void _sc_init_phase2_init(int*swp_data,  CellIterateRange_device cir) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+            cir.nums[CS_dead_hd] += cir.nums[CS_count_dead];
+    }
+    _swp_init(swp_data,  cir);
+}
+
+void initialize_sc(CellManager&cm){
+    SwapStruct sstr; CellIterateRange_device cir = cm.get_cell_iterate_range_d();
+    sstr.arr_avail = cm.swap_idx_store_ptr();
+    sstr.swp_data = cm.swap_data_ptr();
+    sstr.cat = cm.get_device_attr();
+    sstr.cpos = cm.get_device_pos_all();
+    sstr.cst = cm.get_device_cstate();
+    sstr.nmconn = cm.get_device_all_nm_conn();
+    size_t asz = cm.all_size()*2;
+#define _KERM(a,b) <<<a,b>>>
+#define _NTH(fn) fn _KERM((asz)/64+1,64)(sstr,cir)
+    prepare_sc_init_ALIVE _KERM((asz)/64+1,64)(sstr,cir,cm.zzmax_ptr());
+
+        _NTH(prepare_sc_init_ALIVE2);
+        _NTH(sc_init_exec_swap_ALIVE);
+        _sc_init_phase1_init _KERM(asz / 64 + 1, 64) (sstr.swp_data, cir);
+        _NTH(prepare_sc_init_DEAD_m);
+        _NTH(prepare_sc_init_DEAD_m2);
+        _NTH(sc_init_exec_swap_DEAD_m);
+        _sc_init_phase2_init _KERM(asz / 64 + 1, 64) (sstr.swp_data, cir);
 }

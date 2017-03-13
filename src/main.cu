@@ -67,10 +67,12 @@ int main(int argc,char**argv) {
     cmdline::parser psr;
     psr.add<std::string>("input", 'i', "input cell data",true);
     psr.add("old", '\0', "use old format");
+    psr.add("fsc", '\0', "force sc");
     psr.parse_check(argc, argv);
 
     CellManager cm;
     bool use_old_format = psr.exist("old");
+    bool forced_sc=psr.exist("fsc");
     std::string path = psr.get<std::string>("input");
     if (psr.exist("old")) {
         cm.load_old(path);
@@ -112,7 +114,7 @@ int main(int argc,char**argv) {
    
    // CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
-    for (int i = 0; i < 1000000; i++) {
+    for (int i = 0; i < 10; i++) {
         
         const size_t msz = cm.memb_size();
         calc_cell_movement(cm);
@@ -124,23 +126,43 @@ int main(int argc,char**argv) {
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
         cm.refresh_pos_tex();
         //cm.asz_fetch();
+        cm.refresh_zzmax();
+        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
         connect_cell(cm);
         //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
         map_gen(cm, cmap1.acc, cmap2.acc);
         //CUDA_SAFE_CALL(cudaDeviceSynchronize());
-        cm.refresh_zzmax();
+
         //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         cmap1_texr.refresh(); cmap2_texr.refresh();
         calc_ext_stim(cm, &ext_stim.st, cmap1_texr, cmap2_texr, cm.zzmax_ptr(), &ext_stim_out.st);
         //CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+        if(i*DT_Cell>T_TURNOVER&&forced_sc){
+                        	forced_sc=false;
+                        	initialize_sc(cm);
+
+                            connect_cell(cm);
+                            //CUDA_SAFE_CALL(cudaDeviceSynchronize());
+                            DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
+                            map_gen(cm, cmap1.acc, cmap2.acc);
+                            //CUDA_SAFE_CALL(cudaDeviceSynchronize());
+
+                            //CUDA_SAFE_CALL(cudaDeviceSynchronize());
+                            cmap1_texr.refresh(); cmap2_texr.refresh();
+
+                        }
         calc_ca2p(cm,ext_stim.st,cmap1_texr.ct,cmap2_texr.ct);
-        if ((i % 100000 == 0)) {
+        DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
+        if ((i % 1000 == 0)) {
             printf("fetching\n");
             cm.fetch();
             printf("done\n");
             cm.output_old(std::to_string(i/1000));
             printf("out %d", i/1000);
+
+            cm.buffer_size_check();
         }
         //CUDA_SAFE_CALL(cudaDeviceSynchronize());
         //printf("count:%d\n", i);

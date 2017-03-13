@@ -267,7 +267,7 @@ __global__ void ca2p_proc_parent(
 		CellIterateRange_device cir,gj_data*gj,
 		real* ca2p1,real* ca2p2,real* ca2p_avg,real* diffu,real*exinert,real*IP3_1,real*IP3_2,real*agek){
 	if(!(threadIdx.x==0&&blockIdx.x==0))return;
-	if(cir.nums[CS_count_sw]>=SW_THRESH){
+	if(cir.nums[CS_count_sw]>=SW_THRESH||cir.nums[CS_count_num_sc]>0){
 		printf("ca2p calc...\n");
 		initialize_ca2p_calc<<<cir.nums[CS_asz]/256+1,256>>>
 				(cir,cat,gj,ca2p1,ca2p2,ca2p_avg,diffu,exinert,IP3_1,IP3_2,agek);
@@ -297,6 +297,7 @@ __global__ void ca2p_proc_parent(
 		finalize_ca2p<<<cir.nums[CS_asz]/256+1,256>>>
 						(cir,cat,ca2p_avg,exinert,IP3_1);
 		cir.nums[CS_count_sw]=0;
+		if(cir.nums[CS_count_num_sc]>0)cir.nums[CS_count_num_sc]--;
 	}
 }
 
@@ -304,13 +305,24 @@ void calc_ca2p(CellManager&cm,const cudaSurfaceObject_t extstim,cudaTextureObjec
 	const size_t ubs=2*cm.all_size();
     static thrust::device_vector<real> ca2p1(ubs), ca2p2(ubs),
 ca2p_avg(ubs), diffu(ubs), exinert(ubs), IP3_1(ubs), IP3_2(ubs),agek(ubs);
-    static thrust::device_vector<gj_data>gj(ubs);
+    static thrust::device_vector<gj_data> gj(ubs);
     static cuda3DSurface<real> ATP_1(NX, NY, NZ), ATP_2(NX, NY, NZ);
+    static std::vector<thrust::device_vector<real>*> vptr={&ca2p1,&ca2p2,&ca2p_avg,&diffu,&exinert,&IP3_1,&IP3_2,&agek};
+    //retarded
+    for(auto& vp:vptr){
+    	while((double)((int)vp->size()-(int)cm.all_size())<(double)vp->size()*0.2){
+    		vp->resize(vp->size()*1.5);
+    	}
+    }
+
+    while((double)((int)gj.size()-(int)cm.all_size())<(double)gj.size()*0.2){
+    	gj.resize(gj.size()*1.5);
+        	}
 #define _dptr(v) thrust::raw_pointer_cast(v.data())
 
     ca2p_proc_parent<<<1,32>>>(cm.get_device_attr(),cm.get_device_all_nm_conn(),cm.get_device_pos_all(),extstim,cmap1,cmap2,cm.zzmax_ptr(),
     		ATP_1.st,ATP_2.st,cm.get_cell_iterate_range_d(),
     		_dptr(gj),
     		_dptr(ca2p1),_dptr(ca2p2),_dptr(ca2p_avg),_dptr(diffu),_dptr(exinert),_dptr(IP3_1),_dptr(IP3_2),_dptr(agek));
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
 }

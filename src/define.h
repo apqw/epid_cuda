@@ -79,6 +79,8 @@ static constexpr real Kspring = 25.0;
 static constexpr real Kspring_d = 5.0;
 static constexpr real Kspring_division = 5.0;
 
+static constexpr int div_max=10;
+
 static constexpr real accel_div = 1.0;
 static constexpr real eps_kb = 0.12;
 static constexpr real alpha_b = 5.0;
@@ -172,6 +174,8 @@ static constexpr real DER_DER_CONST = 0.08;//harden original 0.2
 static constexpr unsigned int SW_THRESH=20;
 
 static constexpr real gj_init = 0.99;
+static constexpr int NUM_SC_INIT=1;
+static constexpr real T_TURNOVER=6000.0;
 //static constexpr real ca2p_init = 0.122;
 #define CUDA_SAFE_CALL(func) \
 do { \

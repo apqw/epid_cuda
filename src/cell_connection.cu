@@ -122,6 +122,88 @@ __global__ void connect_proc(cudaTextureObject_t pos_tex,NonMembConn* all_nm_con
         
     }
 }
+
+__global__ void connect_proc_opt(cudaTextureObject_t pos_tex,NonMembConn* all_nm_conn, CubicDynArrAccessor<LFStack<int, N3>> darr, int nmemb_start,CellIterateRange_device cir) {
+    //need memset
+    //const int th_id = threadIdx.x;
+    const int index = nmemb_start+blockIdx.x;
+    __shared__ real4 mycp[1];
+    __shared__ int3 an[1];
+    __shared__ ushort rcidx[1024];
+    __shared__ int rccounter[1];
+    __shared__ int cnum[1];
+    if(threadIdx.x==0&&threadIdx.y==0&&threadIdx.z==0){
+    cnum[0]=cir.nums[CS_asz];
+    }
+    __syncthreads();
+    static constexpr int srange = 2;
+    static constexpr int width = srange*2+1;
+    if (index <  cnum[0]) {
+    	if(threadIdx.x==0&&threadIdx.y==0&&threadIdx.z==0){
+    		mycp[0] = tex1Dfetch_real4(pos_tex, index);
+    		an[0].x=  (int)(mycp[0].x*rtANX);
+    		an[0].y = (int)(mycp[0].y*rtANY);
+    		an[0].z = (int)(mycp[0].z*rtANZ);
+    		rccounter[0]=0;
+    	}
+    	__syncthreads(); //no divergence
+
+
+
+        const CellPos& cp = mycp[0];
+        const int anx=an[0].x;
+        const int any=an[0].y;
+        const int anz=an[0].z;
+        DBG_ONLY_B(
+        if (anx >= (int)ANX || any >= (int)ANY || anz >= (int)ANZ || anx < 0 || any < 0 || anz < 0) {
+            dbgprintf("wtf2 %d %d %d, %f %f %f\n", anx, any, anz, cp.x, cp.y, cp.z);
+            assert(false);
+        });
+        const int j = anx - srange + threadIdx.x;
+        const int k = any - srange + threadIdx.y;
+        const int zstart = _m_max(anz - srange, 0); //zstart = zstart > 0 ? zstart : 0;
+        const int zend = _m_min(anz + srange, ANZ - 1); //zend = zend < ANZ - 1 ? zend : ANZ - 1;
+            const int cj = j<0?j+ANX:j>=ANX?j-ANX:j;
+                const int ck = k<0?k+ANY:k>=ANY?k-ANY:k;
+                DBG_ONLY_B(
+                if(cj<0||cj>=ANX||ck<0||ck>=ANY||zstart<0||zstart>=ANZ||zend<0||zend>=ANZ){
+                            	printf("broken coord in conn: %d %d (%d,%d)\n",j,k,zstart,zend);
+                            	//printf("origc:%d %d %d\n",anx,any,anz);
+                            	//printf("cr:%d %d %d\n",ANX,ANY,ANZ);
+                            	assert(false);
+                            });
+                const int cl=zstart+threadIdx.z;
+                if(cl<=zend){
+
+                //for (int cl = zstart; cl <= zend; cl++) {
+                    const LFStack<int, N3>& stref = darr.at(cj, ck, cl);
+                    const size_t g_sz = stref.size();
+                    const int rc_head=atomicAdd(&rccounter[0],(int)g_sz);
+                    //if(rc_head+g_sz>200)printf("rch:%d,%d %d %d %d\n",rc_head,(int)g_sz,cj,ck,cl);
+                    for(int i=0;i<g_sz;i++){
+                    	rcidx[i+rc_head]=stref[i];
+                    }
+
+                }
+                __syncthreads();
+                const int th_id_l=threadIdx.x+blockDim.x*(threadIdx.y+blockDim.y*threadIdx.z);
+                for(int i=th_id_l;i<rccounter[0];i+=blockDim.x*blockDim.y*blockDim.z){
+                	const int oi = rcidx[i];
+                	  if (index <= oi)continue;
+                	  const CellPos ocp = tex1Dfetch_real4(pos_tex, oi);
+                	 const real rad_sum = oi >= nmemb_start ? NON_MEMB_RAD + NON_MEMB_RAD : MEMB_RAD + NON_MEMB_RAD;
+                	                        if (p_dist_sq(cp, ocp) <= LJ_THRESH*LJ_THRESH*rad_sum*rad_sum) {
+                	                            all_nm_conn[index].conn.push_back_d(oi);
+                	                            all_nm_conn[oi].conn.push_back_d(index);
+
+                	                        }
+                }
+
+                //}
+
+
+    }
+}
 #define CLC_TH (32)
 __global__ void connect_proc_dyn_lc(const LFStack<int, N3>* connf,const int myidx,cudaTextureObject_t pos_tex,NonMembConn* all_nm_conn,int nmemb_start,const real4 cp){
 	const size_t g_sz = connf->size();
@@ -278,7 +360,9 @@ void connect_cell(CellManager & cman)
 
     grid_init<<<((unsigned int)sz*2)/ grid_init_THREAD_NUM +1, grid_init_THREAD_NUM >>>(cman.get_pos_tex(),cman.get_device_cstate(), area.acc, cir);
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
-    connect_proc << <TH_MULTI*unsigned(sz*2- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), cir);
+    //connect_proc << <TH_MULTI*unsigned(sz*2- nm_start) / connect_proc_THREAD_NUM + 1, connect_proc_THREAD_NUM >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), cir);
+    connect_proc_opt << <unsigned(sz*2- nm_start), dim3(5,5,5) >> >(cman.get_pos_tex(),cman.get_device_all_nm_conn(), area.acc, int(nm_start), cir);
+
     DBG_ONLY(CUDA_SAFE_CALL(cudaDeviceSynchronize()));
     DBG_ONLY_B(
     		conn_valid_check<<<sz * 2 / 1024 + 1, 1024 >>>(cman.get_device_all_nm_conn(),cir);
